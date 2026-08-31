@@ -1,0 +1,133 @@
+.container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #ededed;
+}
+
+.navBar {
+  background: #f7f7f7;
+  --title-font-size: 17px;
+  --height: 50px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.navBar :global(.adm-nav-bar-back-arrow) {
+  color: #111;
+}
+
+.navBar :global(.adm-nav-bar-title) {
+  color: #111;
+  font-weight: 600;
+}
+
+.more {
+  font-size: 22px;
+  color: #111;
+  letter-spacing: 2px;
+}
+
+.menuItem {
+  padding: 16px 20px;
+  font-size: 17px;
+  color: #111;
+  text-align: center;
+  cursor: pointer;
+}
+
+.menuItem:active {
+  background: #f2f2f2;
+}
+
+.dangerItem {
+  color: #fa5151;
+}
+
+.card {
+  background: #fff;
+  padding: 30px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #95afc0;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 600;
+}
+
+.nickname {
+  font-size: 20px;
+  font-weight: 600;
+  color: #111;
+  margin-top: 14px;
+}
+
+.signature {
+  font-size: 14px;
+  color: #999;
+  margin-top: 8px;
+  text-align: center;
+}
+
+.infoList {
+  background: #fff;
+  margin-top: 8px;
+}
+
+.infoRow {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+}
+
+.infoRow + .infoRow {
+  border-top: 1px solid #f0f0f0;
+}
+
+.infoLabel {
+  width: 90px;
+  font-size: 15px;
+  color: #999;
+}
+
+.infoValue {
+  font-size: 15px;
+  color: #111;
+}
+
+.actions {
+  margin-top: 40px;
+  padding: 0 16px;
+}
+
+.actionBtn {
+  height: 48px;
+  background: #07c160;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.actionBtn:active {
+  opacity: 0.85;
+}
+
+.actionBtn.disabled {
+  background: #f2f2f2;
+  color: #999;
+  cursor: default;
+}

@@ -1,0 +1,18 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: linear-gradient(135deg, #faf5ff 0%, #eff6ff 100%);
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.tabBar {
+  border-top: none;
+  background: white;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+  border-radius: 20px 20px 0 0;
+}

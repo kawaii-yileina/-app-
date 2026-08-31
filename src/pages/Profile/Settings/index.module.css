@@ -1,0 +1,58 @@
+.container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-color, #f8f9fa);
+}
+
+.navBar {
+  background: #f7f7f7;
+  --title-font-size: 17px;
+  --height: 50px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.navBar :global(.adm-nav-bar-back-arrow) {
+  color: #111;
+}
+
+.navBar :global(.adm-nav-bar-title) {
+  color: #111;
+  font-weight: 600;
+}
+
+.list {
+  margin: 16px;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.toggle {
+  width: 48px;
+  height: 28px;
+  background: #e0e0e0;
+  border-radius: 14px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.toggleOn {
+  background: #07c160;
+}
+
+.toggleKnob {
+  width: 24px;
+  height: 24px;
+  background: white;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.toggleOn .toggleKnob {
+  transform: translateX(20px);
+}

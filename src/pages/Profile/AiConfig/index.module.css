@@ -1,0 +1,42 @@
+.container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-color, #f8f9fa);
+}
+
+.navBar {
+  background: var(--primary-color, #7c3aed);
+  color: white;
+  --title-font-size: 17px;
+}
+
+.navBar :global(.adm-nav-bar-back-arrow) {
+  color: white;
+}
+
+.form {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  margin: 16px;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+}
+
+.input {
+  --background: #f5f6f8;
+  --border-radius: 12px;
+}
+
+.footer {
+  padding: 16px 20px;
+  background: white;
+  border-radius: 20px 20px 0 0;
+}
+
+.saveBtn {
+  --border-radius: 14px;
+  --background: var(--primary-color, #7c3aed);
+}

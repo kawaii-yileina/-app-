@@ -1,0 +1,119 @@
+.container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #ededed;
+}
+
+.navBar {
+  background: #f7f7f7;
+  --title-font-size: 17px;
+  --height: 50px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.navBar :global(.adm-nav-bar-back-arrow) {
+  color: #111;
+}
+
+.navBar :global(.adm-nav-bar-title) {
+  color: #111;
+  font-weight: 600;
+}
+
+.createRow {
+  display: flex;
+  align-items: center;
+  height: 50px;
+  padding: 0 16px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.createRow:active {
+  background: #f2f2f2;
+}
+
+.createIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: #5b9bd5;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 300;
+  margin-right: 14px;
+}
+
+.createText {
+  font-size: 16px;
+  color: #111;
+}
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+  background: #fff;
+  margin-top: 8px;
+}
+
+.empty {
+  text-align: center;
+  padding: 60px 0;
+  color: #999;
+  font-size: 14px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  height: 60px;
+  padding: 0 16px;
+  cursor: pointer;
+}
+
+.item:active {
+  background: #f2f2f2;
+}
+
+.item + .item {
+  border-top: 1px solid #f0f0f0;
+}
+
+.avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #6fb648;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 600;
+  margin-right: 14px;
+  flex-shrink: 0;
+}
+
+.info {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font-size: 16px;
+  color: #111;
+}
+
+.dialogContent {
+  padding: 8px 0;
+}
+
+.dialogInput {
+  background: #f7f7f7;
+  border-radius: 6px;
+  --background: #f7f7f7;
+}

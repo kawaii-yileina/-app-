@@ -1,0 +1,201 @@
+.container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #ededed;
+}
+
+.navBar {
+  background: #f7f7f7;
+  --title-font-size: 17px;
+  --height: 50px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.navBar :global(.adm-nav-bar-back-arrow) {
+  color: #111;
+}
+
+.navBar :global(.adm-nav-bar-title) {
+  color: #111;
+  font-weight: 600;
+}
+
+.card {
+  background: #fff;
+  padding: 30px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #6fb648;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 600;
+}
+
+.groupName {
+  font-size: 20px;
+  font-weight: 600;
+  color: #111;
+  margin-top: 14px;
+}
+
+.memberCount {
+  font-size: 14px;
+  color: #999;
+  margin-top: 6px;
+}
+
+.memberSection {
+  background: #fff;
+  margin-top: 8px;
+  padding: 12px 16px 20px;
+}
+
+.gridHeader {
+  font-size: 14px;
+  color: #888;
+  margin-bottom: 14px;
+}
+
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 56px;
+  cursor: pointer;
+  position: relative;
+}
+
+.cellName {
+  font-size: 12px;
+  color: #333;
+  margin-top: 6px;
+  max-width: 56px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.addAvatar {
+  background: #f5f5f5;
+  color: #999;
+  font-size: 28px;
+}
+
+.cell .avatar {
+  width: 48px;
+  height: 48px;
+  font-size: 18px;
+}
+
+.ownerTag {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  background: #fa9d3b;
+  border-radius: 50%;
+  border: 2px solid #fff;
+}
+
+.menu {
+  background: #fff;
+  margin-top: 8px;
+}
+
+.menuItem {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 15px;
+  color: #111;
+  cursor: pointer;
+}
+
+.menuItem:active {
+  background: #f2f2f2;
+}
+
+.menuItem + .menuItem {
+  border-top: 1px solid #f0f0f0;
+}
+
+.quit {
+  margin-top: 8px;
+  background: #fff;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: #fa5151;
+  cursor: pointer;
+}
+
+.quit:active {
+  background: #f2f2f2;
+}
+
+.renameInput {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid #f0f0f0;
+  outline: none;
+  font-size: 16px;
+  padding: 8px 0;
+}
+
+.addPopup {
+  padding: 16px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.popupTitle {
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.popupEmpty {
+  text-align: center;
+  padding: 40px 0;
+  color: #999;
+}
+
+.popupItem {
+  display: flex;
+  align-items: center;
+  padding: 12px 8px;
+  cursor: pointer;
+}
+
+.popupItem:active {
+  background: #f2f2f2;
+}
+
+.popupName {
+  font-size: 16px;
+  color: #111;
+  margin-left: 12px;
+}

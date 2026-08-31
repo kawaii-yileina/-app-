@@ -1,0 +1,422 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #ededed;
+}
+
+.header {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f7f7f7;
+  padding: 0 8px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.headerLeft {
+  width: 48px;
+  display: flex;
+  align-items: center;
+}
+
+.backArrow {
+  font-size: 28px;
+  line-height: 1;
+  color: #333;
+  cursor: pointer;
+  padding-left: 8px;
+}
+
+.headerTitle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.titleText {
+  font-size: 17px;
+  font-weight: 600;
+  color: #111;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c0c0c0;
+}
+
+.statusDot.online {
+  background: #07c160;
+}
+
+.headerRight {
+  width: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.modelBtn {
+  font-size: 12px;
+  color: #576b95;
+  background: rgba(87, 107, 149, 0.1);
+  padding: 4px 8px;
+  border-radius: 10px;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.modelBtn:active {
+  background: rgba(87, 107, 149, 0.2);
+}
+
+.memberCount {
+  color: #888;
+  font-size: 14px;
+}
+
+.messageList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 10px;
+}
+
+.loadingMore {
+  text-align: center;
+  color: #999;
+  font-size: 12px;
+  padding: 8px 0;
+}
+
+.noMore {
+  text-align: center;
+  color: #bbb;
+  font-size: 12px;
+  padding: 8px 0;
+}
+
+.timeBar {
+  text-align: center;
+  margin: 14px 0;
+}
+
+.timeBar::before,
+.timeBar::after {
+  content: '';
+}
+
+.timeBar span {
+  font-size: 12px;
+  color: #999;
+  background: #dcdcdc;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.aiWelcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+  text-align: center;
+}
+
+.aiWelcomeAvatar {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: 32px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3);
+}
+
+.aiWelcome h3 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.aiWelcome p {
+  margin: 0;
+  color: #999;
+  font-size: 14px;
+}
+
+.aiLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: #888;
+}
+
+.streamingContainer {
+  padding: 0 8px;
+  margin-bottom: 8px;
+}
+
+.streamingBubble {
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  max-width: 85%;
+}
+
+.streamingContent {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #111;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.toolCalls {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.toolCall {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.toolName {
+  color: #576b95;
+}
+
+.toolStatus {
+  font-size: 14px;
+}
+
+.inputArea {
+  background: #f7f7f7;
+  padding: 8px 10px;
+  flex-shrink: 0;
+  border-top: 1px solid #e5e5e5;
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.iconBtn {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  cursor: pointer;
+  flex-shrink: 0;
+  border-radius: 8px;
+  color: #191919;
+}
+
+.iconBtn:active {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.input {
+  flex: 1;
+  background: white;
+  border-radius: 8px;
+  --background: white;
+}
+
+.sendBtn {
+  margin-top: 8px;
+  --border-radius: 8px;
+  --background: #07c160;
+  --button-color: white;
+}
+
+.pendingAttachments {
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+  overflow-x: auto;
+}
+
+.pendingItem {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.pendingImage {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e5e5;
+}
+
+.pendingFile {
+  width: 64px;
+  height: 64px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  border: 1px solid #e5e5e5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+}
+
+.pendingFileName {
+  font-size: 10px;
+  color: #666;
+  text-align: center;
+  word-break: break-all;
+  overflow: hidden;
+}
+
+.pendingRemove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  background: #fa5151;
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.menuItem {
+  padding: 16px 20px;
+  font-size: 17px;
+  color: #111;
+  text-align: center;
+  cursor: pointer;
+}
+
+.menuItem:active {
+  background: #f2f2f2;
+}
+
+.dangerItem {
+  color: #fa5151;
+}
+
+.editDialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.editTextarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  font-size: 15px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.editTextarea:focus {
+  outline: none;
+  border-color: #07c160;
+}
+
+.editActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.recordingBanner {
+  background: #576b95;
+  color: white;
+  text-align: center;
+  padding: 8px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.actionPanel {
+  padding: 24px 16px 40px;
+  background: #f7f7f7;
+}
+
+.actionGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px 8px;
+}
+
+.actionItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #666;
+}
+
+.actionIcon {
+  width: 58px;
+  height: 58px;
+  background: #fff;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  color: #fff;
+  transition: all 0.2s ease;
+}
+
+.actionIcon:active {
+  transform: scale(0.92);
+}
+
+.downloadBtn {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 10px 28px;
+  border-radius: 20px;
+  font-size: 15px;
+  cursor: pointer;
+  z-index: 9999;
+  backdrop-filter: blur(10px);
+}
