@@ -27,12 +27,9 @@ const getCroppedImg = async (imageSrc: string, crop: Area): Promise<Blob> => {
   canvas.width = size;
   canvas.height = size;
 
+  // 输出方形原图，圆角由展示层统一裁剪（避免保存成圆形后在圆角方形里露白角）
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, size, size);
-
-  ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
-  ctx.clip();
   ctx.drawImage(
     image,
     crop.x,
@@ -156,7 +153,7 @@ const AvatarEditor = ({ visible, onClose, onUpload }: Props) => {
               crop={crop}
               zoom={zoom}
               aspect={1}
-              cropShape="round"
+              cropShape="rect"
               showGrid={false}
               onCropChange={setCrop}
               onZoomChange={setZoom}

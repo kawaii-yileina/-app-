@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: linear-gradient(135deg, #faf5ff 0%, #eff6ff 100%);
+  background: var(--c-bg);
 }
 
 .content {
@@ -11,8 +11,11 @@
 }
 
 .tabBar {
-  border-top: none;
-  background: white;
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+  /* 覆盖 antd-mobile 的主色，让激活项用品牌粉 */
+  --adm-color-primary: var(--c-primary);
+  border-top: 1px solid var(--c-border);
+  background: var(--c-surface);
+  box-shadow: 0 -6px 20px rgba(58, 51, 53, 0.05);
   border-radius: 20px 20px 0 0;
+  padding-top: 4px;
 }

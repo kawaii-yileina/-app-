@@ -22,7 +22,7 @@ export interface ToolCallState {
 
 export interface AiChatState {
   // 会话列表
-  sessions: string[];
+  sessions: hermes.SessionSummary[];
   currentSessionId: string | null;
 
   // 消息
@@ -414,7 +414,7 @@ export const useAiChatStore = create<AiChatState>((set, get) => ({
     if (isAiMessage) {
       // AI 消息：调用 Hermes API 编辑内容（不改变上下文顺序）
       try {
-        await hermes.editMessage(sessionId, Number(messageId), newContent);
+        await hermes.editMessage(sessionId, messageId, newContent);
         set((state) => ({
           messages: {
             ...state.messages,
@@ -520,7 +520,7 @@ export const useAiChatStore = create<AiChatState>((set, get) => ({
     try {
       await aiChat.removeSession(sessionId);
       set((state) => ({
-        sessions: state.sessions.filter((s) => s !== sessionId),
+        sessions: state.sessions.filter((s) => s.sessionId !== sessionId),
         messages: (() => {
           const { [sessionId]: _, ...rest } = state.messages;
           return rest;

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Result, LoginResponse, User, Friend, Group, Message, Conversation, GroupMember, AiConversation, UserAiConfig, SearchUser, FriendRequestItem } from '../types';
+import type { Result, LoginResponse, User, Friend, Group, Message, Conversation, GroupMember, AiConversation, UserAiConfig, SearchUser, FriendRequestItem, EmojiSticker } from '../types';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -14,13 +14,68 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// ─── 静默续期（single-flight，避免并发 401 触发多次刷新）───
+
+let refreshPromise: Promise<string> | null = null;
+
+const isAuthEndpoint = (url: string) =>
+  url.includes('/auth/refresh') || url.includes('/auth/login') || url.includes('/auth/register');
+
+async function refreshAccessToken(): Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (!refreshToken) throw new Error('no refresh token');
+      const res = await axios.post(
+        `${import.meta.env.VITE_API_BASE_URL || '/api'}/auth/refresh`,
+        { refreshToken },
+        { timeout: 15000 }
+      );
+      const data = res.data?.data;
+      if (!data?.token) throw new Error(res.data?.message || 'refresh failed');
+      localStorage.setItem('token', data.token);
+      if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
+      window.dispatchEvent(new CustomEvent('auth:token-refreshed', {
+        detail: { token: data.token, refreshToken: data.refreshToken },
+      }));
+      return data.token as string;
+    })().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
+function clearAuthAndRedirect() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('user');
+  window.location.href = '/login';
+}
+
 api.interceptors.response.use(
   (response) => response.data,
-  (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+  async (error) => {
+    const original = error.config;
+    const status = error.response?.status;
+    const url: string = original?.url || '';
+
+    if (status === 401 && original && !original._retry && !isAuthEndpoint(url)) {
+      original._retry = true;
+      try {
+        const newToken = await refreshAccessToken();
+        original.headers = original.headers || {};
+        original.headers.Authorization = `Bearer ${newToken}`;
+        return api(original);
+      } catch (refreshError) {
+        clearAuthAndRedirect();
+        return Promise.reject(refreshError);
+      }
+    }
+
+    // 401 且无法刷新（如 refresh 已失效）：清理并回登录页
+    if (status === 401) {
+      clearAuthAndRedirect();
     }
     return Promise.reject(error);
   }
@@ -29,12 +84,22 @@ api.interceptors.response.use(
 export const authApi = {
   login: (username: string, password: string) =>
     api.post<any, Result<LoginResponse>>('/auth/login', { username, password }),
-  register: (username: string, password: string, nickname?: string) =>
-    api.post<any, Result<LoginResponse>>('/auth/register', { username, password, nickname }),
+  loginByCode: (email: string, code: string) =>
+    api.post<any, Result<LoginResponse>>('/auth/login/code', { email, code }),
+  register: (username: string, password: string, nickname?: string, email?: string, code?: string) =>
+    api.post<any, Result<LoginResponse>>('/auth/register', { username, password, nickname, email, code }),
+  sendCode: (email: string, scene: 'register' | 'login' | 'reset_password') =>
+    api.post<any, Result<void>>('/auth/send-code', { email, scene }),
+  resetPassword: (email: string, code: string, newPassword: string) =>
+    api.post<any, Result<void>>('/auth/reset-password', { email, code, newPassword }),
+  changePassword: (oldPassword: string, newPassword: string) =>
+    api.post<any, Result<void>>('/auth/change-password', { oldPassword, newPassword }),
+  deleteAccount: (password: string) =>
+    api.post<any, Result<void>>('/auth/delete-account', { password }),
   getMe: () => api.get<any, Result<User>>('/auth/me'),
   updateProfile: (data: { nickname?: string; signature?: string; avatar?: string }) =>
     api.put<any, Result<User>>('/auth/me', data),
-  logout: () => api.post<any, Result<void>>('/auth/logout'),
+  logout: (refreshToken?: string) => api.post<any, Result<void>>('/auth/logout', { refreshToken }),
 };
 
 export const contactApi = {
@@ -78,6 +143,8 @@ export const messageApi = {
   getConversations: () => api.get<any, Result<Conversation[]>>('/messages/conversations'),
   markAsRead: (targetId: string, chatType: number) =>
     api.put<any, Result<void>>('/messages/conversations/read', { targetId, chatType }),
+  recallMessage: (msgId: string) =>
+    api.post<any, Result<void>>('/messages/recall', { msgId }),
   deleteConversation: (targetId: string, chatType: number) =>
     api.delete<any, Result<void>>(`/messages/conversations/${targetId}/${chatType}`),
   getUnreadCounts: () => api.get<any, Result<Record<string, number>>>('/messages/unread'),
@@ -104,10 +171,15 @@ export const fileApi = {
   },
 };
 
-export const aiApi = {
-  chat: (message: string, sessionId?: string) =>
+export const emojiApi = {
+  list: () => api.get<any, Result<EmojiSticker[]>>('/emoji/stickers'),
+  add: (url: string) => api.post<any, Result<EmojiSticker>>('/emoji/stickers', { url }),
+  remove: (id: string) => api.delete<any, Result<void>>(`/emoji/stickers/${id}`),
+};
+
+export const aiApi = {  chat: (message: string, sessionId?: string) =>
     api.post<any, Result<string>>('/ai/chat', { message, sessionId }),
-  getSessions: () => api.get<any, Result<string[]>>('/ai/sessions'),
+    getSessions: () => api.get<any, Result<{ sessionId: string; title: string | null }[]>>('/ai/sessions'),
   getSessionHistory: (sessionId: string) =>
     api.get<any, Result<AiConversation[]>>(`/ai/sessions/${sessionId}/history`),
   deleteSession: (sessionId: string) =>

@@ -2,35 +2,37 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-color, #f8f9fa);
+  background: var(--c-bg);
 }
 
 .navBar {
-  background: #f7f7f7;
-  --title-font-size: 17px;
+  background: var(--c-surface);
+  --title-font-size: var(--c-font-h2);
   --height: 50px;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--c-border);
 }
 
 .navBar :global(.adm-nav-bar-back-arrow) {
-  color: #111;
+  color: var(--c-ink);
 }
 
 .navBar :global(.adm-nav-bar-title) {
-  color: #111;
+  color: var(--c-ink);
   font-weight: 600;
 }
 
 .list {
-  margin: 16px;
-  border-radius: 16px;
+  margin: 14px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius-xl);
+  box-shadow: var(--c-shadow-sm);
   overflow: hidden;
 }
 
 .toggle {
   width: 48px;
   height: 28px;
-  background: #e0e0e0;
+  background: var(--c-border);
   border-radius: 14px;
   position: relative;
   cursor: pointer;
@@ -38,13 +40,13 @@
 }
 
 .toggleOn {
-  background: #07c160;
+  background: var(--c-primary);
 }
 
 .toggleKnob {
   width: 24px;
   height: 24px;
-  background: white;
+  background: #fff;
   border-radius: 50%;
   position: absolute;
   top: 2px;
@@ -55,4 +57,8 @@
 
 .toggleOn .toggleKnob {
   transform: translateX(20px);
+}
+
+.dangerItem {
+  color: var(--c-danger, #ff3141);
 }

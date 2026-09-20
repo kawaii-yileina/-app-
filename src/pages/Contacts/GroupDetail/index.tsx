@@ -4,6 +4,7 @@ import { NavBar, Toast, Dialog, Popup } from 'antd-mobile';
 import { useTranslation } from 'react-i18next';
 import { contactApi } from '../../../api';
 import { useAuthStore } from '../../../store/useAuthStore';
+import { avatarTint } from '../../../utils/avatarColor';
 import type { Group, GroupMember } from '../../../types';
 import styles from './index.module.css';
 
@@ -169,7 +170,7 @@ const GroupDetail = () => {
       {group && (
         <>
           <div className={styles.card}>
-            <div className={styles.avatar}>{group.name?.charAt(0)}</div>
+            <div className={styles.avatar} style={{ background: avatarTint(group.name || '') }}>{group.name?.charAt(0)}</div>
             <div className={styles.groupName}>{group.name}</div>
             <div className={styles.memberCount}>{members.length} {t('contacts.members')}</div>
           </div>
@@ -183,11 +184,12 @@ const GroupDetail = () => {
               </div>
               {members.map((m) => (
                 <div key={m.userId} className={styles.cell} onClick={() => handleRemoveMember(m)}>
-                  <div className={styles.avatar}>
+                  <div className={styles.avatar} style={{ background: avatarTint(m.nickname || '') }}>
                     {m.nickname?.charAt(0)}
                     {m.role === 2 && <div className={styles.ownerTag} />}
                   </div>
                   <span className={styles.cellName}>{m.nickname}</span>
+                  {m.deleted && <span className={styles.deletedTag}>{t('settings.deletedUser')}</span>}
                 </div>
               ))}
             </div>
@@ -223,7 +225,7 @@ const GroupDetail = () => {
           ) : (
             friends.map((f) => (
               <div key={f.userId} className={styles.popupItem} onClick={() => handleAddMember(f)}>
-                <div className={styles.avatar}>{f.nickname?.charAt(0)}</div>
+                <div className={styles.avatar} style={{ background: avatarTint(f.nickname || '') }}>{f.nickname?.charAt(0)}</div>
                 <span className={styles.popupName}>{f.nickname}</span>
               </div>
             ))

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from 'antd-mobile';
+import { AddCircleOutline, SearchOutline, TeamOutline, UserAddOutline, UserContactOutline } from 'antd-mobile-icons';
 import { useTranslation } from 'react-i18next';
 import { useContactStore } from '../../../store/useContactStore';
 import { useOnlineStore } from '../../../store/useOnlineStore';
@@ -49,28 +50,28 @@ const Contacts = () => {
       <div className={styles.header}>
         <span className={styles.title}>{t('tab.contacts')}</span>
         <div className={styles.addBtn} onClick={() => navigate('/contacts/search')}>
-          +
+          <AddCircleOutline />
         </div>
       </div>
 
       <div className={styles.body}>
         <div className={styles.searchBar} onClick={() => navigate('/contacts/search')}>
-          <span className={styles.searchIcon}>🔍</span>
+          <span className={styles.searchIcon}><SearchOutline /></span>
           <span className={styles.searchPlaceholder}>{t('common.search')}</span>
         </div>
 
         <div className={styles.entries}>
           <div className={styles.entry} onClick={() => navigate('/contacts/requests')}>
-            <div className={`${styles.entryIcon} ${styles.iconRequests}`}>👥</div>
+            <div className={`${styles.entryIcon} ${styles.iconRequests}`}><UserContactOutline /></div>
             <span className={styles.entryText}>{t('contacts.newFriends')}</span>
             <Badge content={requestCount > 0 ? String(requestCount) : undefined} className={styles.entryBadge} />
           </div>
           <div className={styles.entry} onClick={() => navigate('/contacts/groups')}>
-            <div className={`${styles.entryIcon} ${styles.iconGroups}`}>💬</div>
+            <div className={`${styles.entryIcon} ${styles.iconGroups}`}><TeamOutline /></div>
             <span className={styles.entryText}>{t('contacts.groups')}</span>
           </div>
           <div className={styles.entry} onClick={() => navigate('/contacts/search')}>
-            <div className={`${styles.entryIcon} ${styles.iconAdd}`}>＋</div>
+            <div className={`${styles.entryIcon} ${styles.iconAdd}`}><UserAddOutline /></div>
             <span className={styles.entryText}>{t('contacts.addFriend')}</span>
           </div>
         </div>
@@ -94,6 +95,7 @@ const Contacts = () => {
                     </div>
                     <div className={styles.friendInfo}>
                       <span className={styles.friendName}>{name}</span>
+                      {friend.deleted && <span className={styles.deletedTag}>{t('settings.deletedUser')}</span>}
                     </div>
                   </div>
                 );

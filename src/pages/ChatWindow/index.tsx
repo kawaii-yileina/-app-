@@ -1,28 +1,68 @@
-import { useEffect, useRef, useState, Fragment } from 'react';
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
-import { Input, Button, Popup, Toast, SpinLoading, ImageViewer, Picker } from 'antd-mobile';
-import { SoundOutline, SmileOutline, AddOutline, PicturesOutline, CameraOutline, VideoOutline, FolderOutline } from 'antd-mobile-icons';
+import { useEffect, useLayoutEffect, useRef, useState, Fragment, type ReactNode } from 'react';
+import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { Input, Button, Popup, Toast, SpinLoading, ImageViewer, Picker, SearchBar, Dialog } from 'antd-mobile';
+import { SmileOutline, AddOutline, PicturesOutline, CameraOutline, VideoOutline, FolderOutline, DeleteOutline } from 'antd-mobile-icons';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../store/useChatStore';
 import { useContactStore } from '../../store/useContactStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useOnlineStore } from '../../store/useOnlineStore';
 import { useAiChatStore } from '../../stores/aiChatStore';
-import { messageApi, fileApi, contactApi } from '../../api';
-import { getModels, lockModel, type HermesModel } from '../../api/hermes';
+import { messageApi, fileApi, contactApi, emojiApi } from '../../api';
+import { getModels, getSessionDetail, lockModel, type HermesModel } from '../../api/hermes';
 import { downloadFile } from '../../utils/download';
+import {
+  truncatePreview,
+  buildForwardPayload,
+  buildReplyInfo,
+  parseReplyInfo,
+  parseMentions,
+  parseHeaders,
+  pruneMentions,
+  PENDING_OUTGOING_KEY,
+  PENDING_FORWARD_KEY,
+  REPLY_HEADER_KEY,
+  MENTIONS_HEADER_KEY,
+  MENTION_ALL,
+  type PendingOutgoing,
+} from '../../utils/messagePreview';
 import { fileToBase64 } from '../../services/aiChat';
 import wsService from '../../services/websocket';
-import { startRecording, stopRecording } from '../../services/recorder';
+import { startRecording, stopRecording, cancelRecording, isRecordingSupported, isRecordingActive } from '../../services/recorder';
 import MessageBubble from '../../components/MessageBubble';
-import type { Message, ChatMessage, GroupMember } from '../../types';
+import SharedAvatar from '../../components/SharedAvatar';
+import { MicIcon, KeyboardIcon, CopyIcon, QuoteIcon, ForwardIcon, RecallIcon, SaveIcon, DeleteIcon } from '../../components/icons';
+import type { Message, ChatMessage, GroupMember, MentionInfo, EmojiSticker } from '../../types';
 import { AI_ASSISTANT } from '../../types';
 import styles from './index.module.css';
+
+/** 历史消息的 replyTo / mentions / headers 由后端以 JSON 字符串返回，统一解析为对象 */
+const normalizeHistoryMessage = (msg: Message): Message => {
+  const rawReply = msg.replyTo as unknown;
+  const rawMentions = msg.mentions as unknown;
+  const rawHeaders = msg.headers as unknown;
+  return {
+    ...msg,
+    replyTo: typeof rawReply === 'string' ? parseReplyInfo(rawReply) : msg.replyTo,
+    mentions: typeof rawMentions === 'string' ? parseMentions(rawMentions) : msg.mentions,
+    headers: typeof rawHeaders === 'string' ? parseHeaders(rawHeaders) : msg.headers,
+  };
+};
+
+/** 内置 Emoji（C1 第一批，后续可扩展分类面板） */
+const EMOJIS = [
+  '😀', '😄', '😁', '😆', '😅', '😂', '🙂', '😉',
+  '😊', '😍', '😘', '😜', '🤔', '😎', '😢', '😭',
+  '😡', '🥰', '😴', '🤗', '👍', '👎', '👌', '🙏',
+  '👏', '💪', '🎉', '❤️', '💔', '🔥', '✨', '🌟',
+  '🍀', '🌈', '☀️', '🌙', '🍎', '🍕', '☕', '🎁',
+];
 
 const ChatWindow = () => {
   const { t } = useTranslation();
   const { targetId } = useParams<{ targetId: string }>();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const chatType = parseInt(searchParams.get('type') || '0');
   const sessionId = searchParams.get('session');
@@ -48,6 +88,9 @@ const ChatWindow = () => {
   const [inputText, setInputText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
+  /** 输入区模式：文字输入 / 语音（按住说话） */
+  const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [pendingAttachments, setPendingAttachments] = useState<{ type: 'image' | 'file'; file: File; preview: string }[]>([]);
   const [page, setPage] = useState(1);
@@ -57,11 +100,31 @@ const ChatWindow = () => {
   const [imageViewerSrc, setImageViewerSrc] = useState('');
   const [contextMenuVisible, setContextMenuVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [editText, setEditText] = useState('');
+  /** 长按消息时记录的锚点矩形，用于把菜单浮动定位到气泡附近 */
+  const [menuAnchor, setMenuAnchor] = useState<{ top: number; bottom: number; left: number; right: number } | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; arrow: number; below: boolean } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [models, setModels] = useState<HermesModel[]>([]);
   const [currentModel, setCurrentModel] = useState<string | null>(null);
+  const [aiSessionTitle, setAiSessionTitle] = useState<string | null>(null);
+  const [quotingMessage, setQuotingMessage] = useState<Message | null>(null);
+  const [mentions, setMentions] = useState<MentionInfo[]>([]);
+  const [mentionPickerVisible, setMentionPickerVisible] = useState(false);
+  const [mentionKeyword, setMentionKeyword] = useState('');
+  const [peerTyping, setPeerTyping] = useState(false);
+  const [emojiTab, setEmojiTab] = useState<'emoji' | 'sticker'>('emoji');
+  const [stickers, setStickers] = useState<EmojiSticker[]>([]);
+  const stickerInputRef = useRef<HTMLInputElement>(null);
+  const lastTypingSentRef = useRef(0);
+  /** 用户是否按住了录音键（用于处理授权期间松手的情况） */
+  const recordingRef = useRef(false);
+  /** 录音起点 Y，用于上滑取消判断 */
+  const recordStartYRef = useRef(0);
+  const recordCancelArmedRef = useRef(false);
+  const [recordCancelArmed, setRecordCancelArmed] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const handleRecordEndRef = useRef<() => void>(() => {});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const albumInputRef = useRef<HTMLInputElement>(null);
@@ -75,11 +138,45 @@ const ChatWindow = () => {
     : `${targetId}_${chatType}`;
   const conversationMessages = isAiChat ? aiMessages : (messages[conversationKey] || []);
 
+  const targetFriend = !isAiChat && chatType === 0
+    ? friends.find((f) => f.userId === targetId)
+    : undefined;
+  const targetDeleted = !!targetFriend?.deleted;
+
+  const typingAt = useChatStore((s) => s.typing[conversationKey] || 0);
+
+  useEffect(() => {
+    if (!typingAt) {
+      setPeerTyping(false);
+      return;
+    }
+    setPeerTyping(true);
+    const timer = setTimeout(() => setPeerTyping(false), 5000);
+    return () => clearTimeout(timer);
+  }, [typingAt]);
+
+  useEffect(() => {
+    if (showEmoji && emojiTab === 'sticker') {
+      emojiApi.list()
+        .then((res) => { if (res.code === 200) setStickers(res.data); })
+        .catch(() => {});
+    }
+  }, [showEmoji, emojiTab]);
+
   useEffect(() => {
     loadHistory();
     markAsRead();
     if (chatType === 1) {
       loadGroupMembers();
+    }
+    if (isAiChat && sessionId) {
+      // 回显当前锁定模型与会话标题
+      getSessionDetail(sessionId)
+        .then((d) => {
+          if (d.model) setCurrentModel(d.model);
+          if (d.title) setAiSessionTitle(d.title);
+        })
+        .catch(() => {});
     }
   }, [targetId, chatType, sessionId]);
 
@@ -90,36 +187,81 @@ const ChatWindow = () => {
   }, [conversationMessages]);
 
   useEffect(() => {
-    const pendingCard = sessionStorage.getItem('pending_card');
-    if (pendingCard && targetId && user) {
-      sessionStorage.removeItem('pending_card');
+    const pending = sessionStorage.getItem(PENDING_OUTGOING_KEY);
+    if (pending && targetId && user) {
+      sessionStorage.removeItem(PENDING_OUTGOING_KEY);
       try {
-        const card = JSON.parse(pendingCard);
-        const cardMsg: ChatMessage = {
-          type: 'CONTACT_CARD',
-          from: String(user.userId),
-          to: targetId,
-          group: chatType === 1,
-          content: JSON.stringify(card),
-        };
-        wsService.send(cardMsg);
-        const localMsg: Message = {
-          id: Date.now().toString(),
-          msgId: Date.now().toString(),
-          senderId: user.userId,
-          receiverId: targetId,
-          chatType,
-          msgType: 'CONTACT_CARD',
-          content: JSON.stringify(card),
-          createdAt: new Date().toISOString(),
-        };
-        addMessage(conversationKey, localMsg);
-        updateConversation(conversationKey, '[个人名片]', new Date().toISOString(), false);
+        const payload = JSON.parse(pending) as PendingOutgoing;
+        sendPendingOutgoing(payload);
       } catch (e) {
-        console.error('Failed to send contact card:', e);
+        console.error('Failed to send pending outgoing message:', e);
       }
     }
-  }, [targetId]);
+  }, [targetId, location.key]);
+
+  /** 发送 WS 消息；连接未就绪时立即置该消息为失败并提示，避免静默丢包 */
+  const sendViaWs = (message: ChatMessage, clientMsgId: string): boolean => {
+    if (wsService.send(message)) return true;
+    useChatStore.getState().clearPending(clientMsgId);
+    useChatStore.getState().updateMessage(conversationKey, clientMsgId, { status: 'failed' });
+    Toast.show({ content: t('chat.connectionLost') });
+    return false;
+  };
+
+  /**
+   * 发送经 sessionStorage 传递的待发消息（转发、名片）。
+   * 统一走「乐观插入 → WS 发送 → ACK 超时置失败」流程。
+   */
+  const sendPendingOutgoing = (payload: PendingOutgoing) => {
+    if (!user || !targetId) return;
+    const clientMsgId = Date.now().toString();
+    const headers = { ...(payload.headers || {}), clientMsgId };
+
+    addMessage(conversationKey, {
+      id: clientMsgId,
+      msgId: clientMsgId,
+      senderId: user.userId,
+      receiverId: targetId,
+      chatType,
+      msgType: payload.msgType,
+      content: payload.content,
+      createdAt: new Date().toISOString(),
+      status: 'sending',
+      headers,
+    });
+
+    if (!sendViaWs({
+      type: payload.msgType,
+      from: String(user.userId),
+      to: targetId,
+      group: chatType === 1,
+      content: payload.content,
+      headers,
+    }, clientMsgId)) {
+      return;
+    }
+
+    const ackTimer = setTimeout(() => {
+      const currentMessages = useChatStore.getState().messages[conversationKey] || [];
+      const msg = currentMessages.find(m => m.msgId === clientMsgId);
+      if (msg && msg.status === 'sending') {
+        useChatStore.getState().updateMessage(conversationKey, clientMsgId, { status: 'failed' });
+      }
+      useChatStore.getState().clearPending(clientMsgId);
+    }, 2000);
+    useChatStore.getState().registerPending(clientMsgId, ackTimer);
+
+    updateConversation(
+      conversationKey,
+      payload.preview || truncatePreview(payload.content, payload.msgType, payload.headers),
+      new Date().toISOString(),
+      false
+    );
+
+    if (payload.successToast) {
+      Toast.show({ content: payload.successToast, position: 'center' });
+    }
+  };
 
   const loadHistory = async () => {
     if (!targetId) return;
@@ -135,7 +277,7 @@ const ChatWindow = () => {
         if (res.code === 200) {
           const data = res.data || [];
           setHasMore(data.length >= 20);
-          useChatStore.getState().setMessages(conversationKey, [...data].reverse());
+          useChatStore.getState().setMessages(conversationKey, [...data].reverse().map(normalizeHistoryMessage));
         }
       }
     } catch (e) {
@@ -152,7 +294,7 @@ const ChatWindow = () => {
       const nextPage = page + 1;
       const res = await messageApi.getHistory(targetId, chatType, nextPage, 20);
       if (res.code === 200) {
-        const older = [...(res.data || [])].reverse();
+        const older = [...(res.data || [])].reverse().map(normalizeHistoryMessage);
         setHasMore((res.data || []).length >= 20);
         setPage(nextPage);
         if (older.length > 0) {
@@ -235,6 +377,10 @@ const ChatWindow = () => {
 
   const sendTextMessage = async () => {
     if (!inputText.trim() && pendingAttachments.length === 0) return;
+    if (targetDeleted) {
+      Toast.show({ content: t('chat.userDeleted') });
+      return;
+    }
     if (!user) {
       Toast.show({ content: t('common.error') });
       return;
@@ -244,28 +390,48 @@ const ChatWindow = () => {
       return;
     }
 
+    const clientMsgId = Date.now().toString();
+    const textToSend = inputText.trim();
+    const replyInfo = !isAiChat && quotingMessage ? buildReplyInfo(quotingMessage) : undefined;
+    // 仅保留正文中仍存在的 @提及（用户可能删除了 token）
+    const activeMentions = chatType === 1 && !isAiChat ? pruneMentions(textToSend, mentions) : [];
+
+    const outHeaders: Record<string, string> = { clientMsgId };
+    if (replyInfo) {
+      outHeaders[REPLY_HEADER_KEY] = JSON.stringify(replyInfo);
+    }
+    if (activeMentions.length > 0) {
+      outHeaders[MENTIONS_HEADER_KEY] = JSON.stringify(activeMentions);
+    }
+
     const userMessage: Message = {
-      id: Date.now().toString(),
-      msgId: Date.now().toString(),
+      id: clientMsgId,
+      msgId: clientMsgId,
       senderId: user.userId,
       receiverId: targetId,
       chatType: chatType,
       msgType: pendingAttachments.length > 0 && pendingAttachments[0].type === 'image' ? 'IMAGE' : 'TEXT',
-      content: pendingAttachments.length > 0 ? pendingAttachments[0].preview : inputText.trim(),
+      content: pendingAttachments.length > 0 ? pendingAttachments[0].preview : textToSend,
       createdAt: new Date().toISOString(),
+      status: isAiChat ? undefined : 'sending',
+      headers: isAiChat ? undefined : outHeaders,
+      replyTo: replyInfo,
+      mentions: activeMentions.length > 0 ? activeMentions : undefined,
     };
 
     addMessage(conversationKey, userMessage);
-    const textToSend = inputText.trim();
     const attachmentsToSend = [...pendingAttachments];
     setInputText('');
     setPendingAttachments([]);
+    setQuotingMessage(null);
+    setMentions([]);
+    setShowActions(false);
+    setShowEmoji(false);
 
     if (isAiChat) {
       const currentSessionId = sessionId || `ai_${user.userId}`;
 
       if (attachmentsToSend.length > 0) {
-        // 有附件：构造多模态消息
         const attachment = attachmentsToSend[0];
         if (attachment.type === 'image') {
           const base64 = await fileToBase64(attachment.file);
@@ -283,7 +449,6 @@ const ChatWindow = () => {
           await aiSendMessage(currentSessionId, message, String(user.userId));
         }
       } else {
-        // 纯文本
         await aiSendMessage(currentSessionId, textToSend, String(user.userId));
       }
     } else {
@@ -293,8 +458,20 @@ const ChatWindow = () => {
         to: targetId,
         group: chatType === 1,
         content: inputText.trim(),
+        headers: outHeaders,
       };
-      wsService.send(wsMessage);
+      if (!sendViaWs(wsMessage, clientMsgId)) return;
+
+      const ackTimer = setTimeout(() => {
+        const currentMessages = useChatStore.getState().messages[conversationKey] || [];
+        const msg = currentMessages.find(m => m.msgId === clientMsgId);
+        if (msg && msg.status === 'sending') {
+          useChatStore.getState().updateMessage(conversationKey, clientMsgId, { status: 'failed' });
+        }
+        useChatStore.getState().clearPending(clientMsgId);
+      }, 2000);
+      useChatStore.getState().registerPending(clientMsgId, ackTimer);
+
       updateConversation(
         conversationKey,
         inputText.trim().length > 30 ? inputText.trim().substring(0, 30) + '...' : inputText.trim(),
@@ -319,9 +496,74 @@ const ChatWindow = () => {
         Toast.show({ content: t('chat.fileNotSupported') });
       }
     } else {
-      // 普通聊天：原有上传逻辑
-      // ...existing code...
+      // 普通聊天：上传后通过 WS 发送（乐观插入 → 上传进度 → ACK 超时置失败）
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+      const msgType = isImage ? 'IMAGE' : isVideo ? 'VIDEO' : 'FILE';
+      const clientMsgId = Date.now().toString();
+      const headers: Record<string, string> = { clientMsgId };
+      if (msgType === 'FILE') {
+        headers.originalName = file.name;
+        headers.size = String(file.size);
+      }
+
+      const localPreview = isImage ? URL.createObjectURL(file) : '';
+      addMessage(conversationKey, {
+        id: clientMsgId,
+        msgId: clientMsgId,
+        senderId: user.userId,
+        receiverId: targetId,
+        chatType,
+        msgType,
+        content: localPreview,
+        createdAt: new Date().toISOString(),
+        status: 'sending',
+        progress: 0,
+        headers,
+      });
+      updateConversation(
+        conversationKey,
+        truncatePreview('', msgType, headers),
+        new Date().toISOString(),
+        false
+      );
+
+      try {
+        const result = await fileApi.upload(file, (percent) => {
+          useChatStore.getState().updateMessage(conversationKey, clientMsgId, { progress: percent });
+        });
+        useChatStore.getState().updateMessage(conversationKey, clientMsgId, {
+          content: result.url,
+          progress: 100,
+        });
+        if (localPreview) URL.revokeObjectURL(localPreview);
+
+        if (!sendViaWs({
+          type: msgType,
+          from: String(user.userId),
+          to: targetId,
+          group: chatType === 1,
+          content: result.url,
+          headers,
+        }, clientMsgId)) return;
+
+        const ackTimer = setTimeout(() => {
+          const currentMessages = useChatStore.getState().messages[conversationKey] || [];
+          const msg = currentMessages.find(m => m.msgId === clientMsgId);
+          if (msg && msg.status === 'sending') {
+            useChatStore.getState().updateMessage(conversationKey, clientMsgId, { status: 'failed' });
+          }
+          useChatStore.getState().clearPending(clientMsgId);
+        }, 8000);
+        useChatStore.getState().registerPending(clientMsgId, ackTimer);
+      } catch (e) {
+        console.error('Failed to upload/send media:', e);
+        useChatStore.getState().updateMessage(conversationKey, clientMsgId, { status: 'failed' });
+        Toast.show({ content: t('chat.sendFailed') });
+      }
     }
+
+    setShowActions(false);
 
     // 清空 input
     [fileInputRef.current, albumInputRef.current, cameraInputRef.current, videoInputRef.current, docInputRef.current].forEach(input => {
@@ -329,38 +571,108 @@ const ChatWindow = () => {
     });
   };
 
-  const handleRecordStart = async () => {
+  const handleRecordStart = async (e: React.PointerEvent) => {
+    if (recordingRef.current) return;
+    recordingRef.current = true;
+    recordStartYRef.current = e.clientY;
+    recordCancelArmedRef.current = false;
+    setRecordCancelArmed(false);
+    setRecordSeconds(0);
+
+    if (!isRecordingSupported()) {
+      recordingRef.current = false;
+      Toast.show({ content: t('chat.recordNotSupported') });
+      return;
+    }
     try {
       await startRecording();
+      // 授权过程中用户已松手：直接取消，避免一直录下去
+      if (!recordingRef.current) {
+        cancelRecording();
+        return;
+      }
       setIsRecording(true);
     } catch (e) {
+      recordingRef.current = false;
       Toast.show({ content: t('chat.failedRecord') });
     }
   };
 
+  /** 上滑超过阈值（80px）进入取消态 */
+  const handleRecordMove = (e: React.PointerEvent) => {
+    if (!recordingRef.current) return;
+    const armed = recordStartYRef.current - e.clientY > 80;
+    if (armed !== recordCancelArmedRef.current) {
+      recordCancelArmedRef.current = armed;
+      setRecordCancelArmed(armed);
+    }
+  };
+
   const handleRecordEnd = async () => {
-    if (!isRecording || !targetId || !user) return;
+    if (!recordingRef.current) return;
+    recordingRef.current = false;
+    setIsRecording(false);
+    const wasCancel = recordCancelArmedRef.current;
+    recordCancelArmedRef.current = false;
+    setRecordCancelArmed(false);
+    // 尚未真正开始录音（授权中），startRecording 完成后会自行取消
+    if (!isRecordingActive()) return;
+
+    if (wasCancel) {
+      cancelRecording();
+      Toast.show({ content: t('chat.recordCanceled') });
+      return;
+    }
+    if (!targetId || !user) {
+      cancelRecording();
+      return;
+    }
 
     try {
-      const { blob, duration } = await stopRecording();
-      setIsRecording(false);
+      const { blob, duration, mimeType, format, ext } = await stopRecording();
+      if (duration < 0.8) {
+        Toast.show({ content: t('chat.recordTooShort') });
+        return;
+      }
 
-      const file = new File([blob], `voice_${Date.now()}.webm`, { type: 'audio/webm' });
+      const file = new File([blob], `voice_${Date.now()}.${ext}`, { type: mimeType });
       const fileResult = await fileApi.upload(file);
 
+      const clientMsgId = Date.now().toString();
+      const voiceHeaders = { duration: String(duration), format };
       const message: ChatMessage = {
         type: 'VOICE',
         from: String(user.userId),
         to: targetId,
         group: chatType === 1,
         content: fileResult.url,
-        headers: {
-          duration: String(duration),
-          format: 'webm',
-        },
+        headers: { ...voiceHeaders, clientMsgId },
       };
 
-      wsService.send(message);
+      const localMsg: Message = {
+        id: clientMsgId,
+        msgId: clientMsgId,
+        senderId: user.userId,
+        receiverId: targetId,
+        chatType,
+        msgType: 'VOICE',
+        content: fileResult.url,
+        createdAt: new Date().toISOString(),
+        status: 'sending',
+        headers: voiceHeaders,
+      };
+      addMessage(conversationKey, localMsg);
+      if (!sendViaWs(message, clientMsgId)) return;
+      const ackTimer = setTimeout(() => {
+        const currentMessages = useChatStore.getState().messages[conversationKey] || [];
+        const msg = currentMessages.find(m => m.msgId === clientMsgId);
+        if (msg && msg.status === 'sending') {
+          useChatStore.getState().updateMessage(conversationKey, clientMsgId, { status: 'failed' });
+        }
+        useChatStore.getState().clearPending(clientMsgId);
+      }, 8000);
+      useChatStore.getState().registerPending(clientMsgId, ackTimer);
+
       updateConversation(
         conversationKey,
         `[语音] ${Math.round(duration)}"`,
@@ -371,9 +683,27 @@ const ChatWindow = () => {
       Toast.show({ content: t('chat.failedSendVoice') });
     }
   };
+  handleRecordEndRef.current = handleRecordEnd;
+
+  /** 录音计时 + 60 秒自动发送上限 */
+  useEffect(() => {
+    if (!isRecording) return;
+    const timer = setInterval(() => {
+      setRecordSeconds((prev) => {
+        const next = prev + 0.1;
+        if (next >= 60) {
+          clearInterval(timer);
+          handleRecordEndRef.current();
+          return 60;
+        }
+        return next;
+      });
+    }, 100);
+    return () => clearInterval(timer);
+  }, [isRecording]);
 
   const getChatTitle = () => {
-    if (isAiChat) return AI_ASSISTANT.NAME;
+    if (isAiChat) return aiSessionTitle || AI_ASSISTANT.NAME;
     if (chatType === 1) {
       const group = groups.find((g) => g.id === String(targetId));
       return group?.name || t('common.unknownGroup');
@@ -386,7 +716,325 @@ const ChatWindow = () => {
 
   const handleLongPress = (msg: Message) => {
     setSelectedMessage(msg);
+    const el = msg.msgId
+      ? (document.querySelector(`[data-msg-id="${CSS.escape(msg.msgId)}"]`) as HTMLElement | null)
+      : null;
+    const rect = el?.getBoundingClientRect();
+    setMenuAnchor(
+      rect
+        ? { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right }
+        : {
+            top: window.innerHeight / 2,
+            bottom: window.innerHeight / 2,
+            left: window.innerWidth / 2,
+            right: window.innerWidth / 2,
+          },
+    );
     setContextMenuVisible(true);
+  };
+
+  // 菜单浮动定位：优先显示在气泡上方，空间不足则移到下方；箭头对准气泡中心
+  useLayoutEffect(() => {
+    if (!contextMenuVisible || !menuAnchor || !menuRef.current) {
+      setMenuPos(null);
+      return;
+    }
+    const panel = menuRef.current.getBoundingClientRect();
+    const gap = 14;
+    const margin = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const centerX = (menuAnchor.left + menuAnchor.right) / 2;
+    const left = Math.max(margin, Math.min(centerX - panel.width / 2, vw - panel.width - margin));
+    let below = false;
+    let top = menuAnchor.top - panel.height - gap;
+    if (top < margin) {
+      below = true;
+      top = menuAnchor.bottom + gap;
+    }
+    if (top + panel.height > vh - margin) {
+      top = Math.max(margin, vh - panel.height - margin);
+    }
+    const arrow = Math.max(16, Math.min(centerX - left, panel.width - 16));
+    setMenuPos({ top, left, arrow, below });
+  }, [contextMenuVisible, menuAnchor, selectedMessage]);
+
+  /** 撤回时限（毫秒），与后端保持一致 */
+  const RECALL_TIMEOUT_MS = 2 * 60 * 1000;
+
+  /** 是否可撤回：非 AI 会话、本人消息、未撤回、已发送（有服务端 msgId）、2 分钟内 */
+  const canRecall = (msg: Message | null): boolean => {
+    if (!msg || isAiChat) return false;
+    if (msg.senderId !== String(user?.userId)) return false;
+    if (msg.msgType === 'RECALL') return false;
+    if (msg.status === 'sending' || msg.status === 'failed') return false;
+    return Date.now() - new Date(msg.createdAt).getTime() <= RECALL_TIMEOUT_MS;
+  };
+
+  const handleRecallMessage = async () => {
+    if (!selectedMessage) return;
+    const msgId = selectedMessage.msgId;
+    setContextMenuVisible(false);
+    try {
+      const res = await messageApi.recallMessage(msgId);
+      if (res.code === 200) {
+        useChatStore.getState().updateMessage(conversationKey, msgId, {
+          msgType: 'RECALL',
+          content: '',
+        });
+        // 撤回可能改变会话预览，以后端为准刷新列表
+        const convRes = await messageApi.getConversations();
+        if (convRes.code === 200) {
+          useChatStore.getState().setConversations(convRes.data);
+        }
+      } else {
+        Toast.show({ content: res.message || t('chat.recallFailed') });
+      }
+    } catch (e) {
+      Toast.show({ content: t('chat.recallFailed') });
+    }
+  };
+
+  /** 转发：把消息载荷暂存 sessionStorage，跳转目标选择页 */
+  const handleForwardMessage = () => {
+    if (!selectedMessage) return;
+    sessionStorage.setItem(PENDING_FORWARD_KEY, JSON.stringify(buildForwardPayload(selectedMessage)));
+    setContextMenuVisible(false);
+    navigate('/select-target?action=forward');
+  };
+
+  /** 保存媒体消息（图片/视频/文件；语音不提供） */
+  const handleSaveMessage = () => {
+    if (selectedMessage) {
+      downloadFile(selectedMessage.content);
+    }
+    setContextMenuVisible(false);
+  };
+
+  /** 引用：在输入区展示引用条；群聊中同时 @ 被引用消息的发送者（微信式回复） */
+  const handleQuoteMessage = () => {
+    if (!selectedMessage) return;
+    setQuotingMessage(selectedMessage);
+    setContextMenuVisible(false);
+    if (chatType === 1 && selectedMessage.senderId !== String(user?.userId)) {
+      const nickname = getSenderNameFor(selectedMessage.senderId);
+      if (nickname) {
+        insertMention({ userId: selectedMessage.senderId, nickname });
+      }
+    }
+  };
+
+  /** 可 @ 的群成员（不含自己） */
+  const mentionableMembers = groupMembers.filter((m) => m.userId !== String(user?.userId));
+
+  /** 当前用户是否可 @所有人（群主或管理员） */
+  const canMentionAll = (() => {
+    const me = groupMembers.find((m) => m.userId === String(user?.userId));
+    return !!me && me.role >= 1;
+  })();
+
+  /** 插入 Emoji 到输入框 */
+  const insertEmoji = (emoji: string) => {
+    setInputText((prev) => `${prev}${emoji}`);
+  };
+
+  /** 上传本地图片并加入表情包收藏 */
+  const handleStickerFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      Toast.show({ content: t('chat.fileNotSupported') });
+      return;
+    }
+    try {
+      const uploaded = await fileApi.upload(file);
+      const res = await emojiApi.add(uploaded.url);
+      if (res.code === 200) {
+        setStickers((prev) => [res.data, ...prev.filter((s) => s.url !== res.data.url)]);
+        Toast.show({ content: t('chat.stickerAdded') });
+      } else {
+        Toast.show({ content: res.message || t('chat.stickerAddFailed') });
+      }
+    } catch (err) {
+      console.error('Failed to add sticker:', err);
+      Toast.show({ content: t('chat.stickerAddFailed') });
+    }
+  };
+
+  const handleStickerDelete = (sticker: EmojiSticker) => {
+    Dialog.confirm({
+      content: t('chat.stickerDeleteConfirm'),
+      onConfirm: async () => {
+        try {
+          const res = await emojiApi.remove(sticker.id);
+          if (res.code === 200) {
+            setStickers((prev) => prev.filter((s) => s.id !== sticker.id));
+            Toast.show({ content: t('chat.stickerDeleted') });
+          } else {
+            Toast.show({ content: res.message || t('chat.stickerDeleteFailed') });
+          }
+        } catch (err) {
+          console.error('Failed to delete sticker:', err);
+          Toast.show({ content: t('chat.stickerDeleteFailed') });
+        }
+      },
+    });
+  };
+
+  /** 点击表情包：以图片消息发送（AI 会话不支持） */
+  const sendSticker = (sticker: EmojiSticker) => {
+    if (isAiChat || !user || !targetId) return;
+    const clientMsgId = Date.now().toString();
+    const headers: Record<string, string> = { clientMsgId };
+
+    addMessage(conversationKey, {
+      id: clientMsgId,
+      msgId: clientMsgId,
+      senderId: user.userId,
+      receiverId: targetId,
+      chatType,
+      msgType: 'IMAGE',
+      content: sticker.url,
+      createdAt: new Date().toISOString(),
+      status: 'sending',
+      headers,
+    });
+    updateConversation(
+      conversationKey,
+      truncatePreview('', 'IMAGE', headers),
+      new Date().toISOString(),
+      false
+    );
+
+    if (!sendViaWs({
+      type: 'IMAGE',
+      from: String(user.userId),
+      to: targetId,
+      group: chatType === 1,
+      content: sticker.url,
+      headers,
+    }, clientMsgId)) return;
+
+    const ackTimer = setTimeout(() => {
+      const currentMessages = useChatStore.getState().messages[conversationKey] || [];
+      const msg = currentMessages.find((m) => m.msgId === clientMsgId);
+      if (msg && msg.status === 'sending') {
+        useChatStore.getState().updateMessage(conversationKey, clientMsgId, { status: 'failed' });
+      }
+      useChatStore.getState().clearPending(clientMsgId);
+    }, 8000);
+    useChatStore.getState().registerPending(clientMsgId, ackTimer);
+
+    setShowEmoji(false);
+  };
+
+  /** 插入 @提及 token 到输入框 */
+  const insertMention = (member: MentionInfo) => {
+    setInputText((prev) => `${prev}@${member.nickname} `);
+    setMentions((prev) =>
+      prev.some((m) => m.userId === member.userId) ? prev : [...prev, member]
+    );
+    setMentionPickerVisible(false);
+    setMentionKeyword('');
+  };
+
+  /** 输入框变化：仅当用户主动输入 '@'（文本变长且以 '@' 结尾）时唤起成员选择浮层，删除字符导致的 '@' 结尾不触发 */
+  const handleInputChange = (val: string) => {
+    if (!isAiChat && chatType === 1 && val.endsWith('@') && val.length > inputText.length) {
+      setInputText(val.slice(0, -1));
+      setMentionPickerVisible(true);
+      return;
+    }
+    setInputText(val);
+    sendTyping();
+  };
+
+  /** 发送输入中状态（仅私聊），2s 节流，避免频繁推送 */
+  const sendTyping = () => {
+    if (isAiChat || chatType !== 0 || !user || !targetId) return;
+    const now = Date.now();
+    if (now - lastTypingSentRef.current < 2000) return;
+    lastTypingSentRef.current = now;
+    wsService.send({
+      type: 'TYPING',
+      from: String(user.userId),
+      to: targetId,
+      group: false,
+      content: '',
+    });
+  };
+
+  /** 退格时把 '@昵称'（含尾随空格）当作一个整体删除，避免逐字删 */
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Backspace' || isAiChat || chatType !== 1 || mentions.length === 0) return;
+    const el = e.currentTarget;
+    const caret = el.selectionStart ?? 0;
+    if (caret !== el.selectionEnd || caret === 0) return;
+
+    const before = inputText.slice(0, caret);
+    const token = mentions
+      .map((m) => `@${m.nickname}`)
+      .filter((t) => before.endsWith(t) || before.endsWith(`${t} `))
+      .sort((a, b) => b.length - a.length)[0];
+    if (!token) return;
+
+    const tokenLength = before.endsWith(`${token} `) ? token.length + 1 : token.length;
+    const start = caret - tokenLength;
+    e.preventDefault();
+    setInputText(inputText.slice(0, start) + inputText.slice(caret));
+    setMentions((prev) => prev.filter((m) => `@${m.nickname}` !== token));
+    requestAnimationFrame(() => el.setSelectionRange(start, start));
+  };
+
+  /** 点击引用块：定位并高亮原消息（不在已加载范围时提示） */
+  const handleQuoteClick = (replyMsgId: string) => {
+    const el = messageListRef.current?.querySelector(`[data-msg-id="${replyMsgId}"]`) as HTMLElement | null;
+    if (!el) {
+      Toast.show({ content: t('chat.quoteNotLoaded') });
+      return;
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.animate(
+      [{ backgroundColor: 'rgba(7, 193, 96, 0.28)' }, { backgroundColor: 'transparent' }],
+      { duration: 1200, easing: 'ease-out' }
+    );
+  };
+
+  const handleResend = (msg: Message) => {
+    if (!user || !targetId) return;
+    const clientMsgId = Date.now().toString();
+    const resendMessage: Message = {
+      ...msg,
+      id: clientMsgId,
+      msgId: clientMsgId,
+      status: 'sending',
+      headers: { ...msg.headers, clientMsgId },
+    };
+    // 删除旧的失败消息，添加新的
+    const currentMessages = useChatStore.getState().messages[conversationKey] || [];
+    useChatStore.getState().setMessages(
+      conversationKey,
+      currentMessages.filter(m => m.msgId !== msg.msgId).concat(resendMessage)
+    );
+    const wsMessage: ChatMessage = {
+      type: msg.msgType,
+      from: String(user.userId),
+      to: targetId,
+      group: chatType === 1,
+      content: msg.content,
+      headers: { clientMsgId },
+    };
+    if (!sendViaWs(wsMessage, clientMsgId)) return;
+    const ackTimer = setTimeout(() => {
+      const msgs = useChatStore.getState().messages[conversationKey] || [];
+      const m = msgs.find(x => x.msgId === clientMsgId);
+      if (m && m.status === 'sending') {
+        useChatStore.getState().updateMessage(conversationKey, clientMsgId, { status: 'failed' });
+      }
+      useChatStore.getState().clearPending(clientMsgId);
+    }, 8000);
+    useChatStore.getState().registerPending(clientMsgId, ackTimer);
   };
 
   const handleCopyMessage = () => {
@@ -408,49 +1056,6 @@ const ChatWindow = () => {
     setContextMenuVisible(false);
   };
 
-  const handleEditMessage = () => {
-    if (selectedMessage) {
-      setEditingMessageId(selectedMessage.msgId);
-      setEditText(selectedMessage.content);
-      setContextMenuVisible(false);
-    }
-  };
-
-  const handleRegenerate = async () => {
-    if (selectedMessage && isAiChat && sessionId && user) {
-      await useAiChatStore.getState().regenerateMessage(sessionId, selectedMessage.msgId, String(user.userId));
-    }
-    setContextMenuVisible(false);
-  };
-
-  const handleResendMessage = async () => {
-    if (selectedMessage && isAiChat && sessionId && user) {
-      setContextMenuVisible(false);
-      await useAiChatStore.getState().resendMessage(sessionId, selectedMessage.msgId, String(user.userId));
-    } else {
-      setContextMenuVisible(false);
-    }
-  };
-
-  const handleSaveEdit = async () => {
-    if (editingMessageId && isAiChat && sessionId && user) {
-      try {
-        await useAiChatStore.getState().editMessage(
-          sessionId, editingMessageId, editText, String(user.userId)
-        );
-        setEditingMessageId(null);
-        setEditText('');
-      } catch (e) {
-        Toast.show({ content: t('common.error') });
-      }
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingMessageId(null);
-    setEditText('');
-  };
-
   const handleOpenModelPicker = () => {
     if (models.length === 0) {
       getModels().then((list) => {
@@ -462,18 +1067,51 @@ const ChatWindow = () => {
     }
   };
 
-  const handleSelectModel = async (modelId: string) => {
+  const handleSelectModel = async (modelId: string, provider?: string) => {
     setShowModelPicker(false);
     const sid = sessionId || `ai_${user?.userId}`;
     if (!sid) return;
     try {
-      await lockModel(sid, modelId);
+      // 必须同时锁定 provider（同一模型可能存在于多个渠道）；
+      // reasoning_effort=low：强制思考型模型（如 glm-5.3 系列）必须指定档位，
+      // 否则上游报 400 "cannot be disabled; please use low, high, or max"
+      await lockModel(sid, modelId, provider, { reasoning_effort: 'low' });
       setCurrentModel(modelId);
       Toast.show({ content: `${t('ai.modelLocked')}: ${modelId}` });
     } catch (e) {
       Toast.show({ content: t('common.error') });
     }
   };
+
+  // Picker 选项：provider · model 展示，value 用 provider/model 保证同模型不同渠道唯一
+  const modelPickerKey = (m: HermesModel) => `${m.provider || ''}/${m.id}`;
+  const modelPickerColumns = [models.map((m) => ({
+    label: m.provider ? `${m.provider} · ${m.id}` : m.id,
+    value: modelPickerKey(m),
+  }))];
+  const currentModelKey = (() => {
+    const found = models.find((m) => m.id === currentModel);
+    return found ? modelPickerKey(found) : '';
+  })();
+
+  // 长按菜单项（QQ 风格宫格，仅保留普通聊天可用的操作）
+  const menuActions: { key: string; label: string; icon: ReactNode; danger?: boolean; onClick: () => void }[] = [];
+  if (selectedMessage) {
+    if (selectedMessage.msgType !== 'RECALL') {
+      menuActions.push({ key: 'copy', label: t('chat.copyMessage'), icon: <CopyIcon />, onClick: handleCopyMessage });
+    }
+    if (!isAiChat && selectedMessage.msgType !== 'RECALL') {
+      menuActions.push({ key: 'quote', label: t('chat.quote'), icon: <QuoteIcon />, onClick: handleQuoteMessage });
+      menuActions.push({ key: 'forward', label: t('chat.forward'), icon: <ForwardIcon />, onClick: handleForwardMessage });
+    }
+    if (canRecall(selectedMessage)) {
+      menuActions.push({ key: 'recall', label: t('chat.recall'), icon: <RecallIcon />, onClick: handleRecallMessage });
+    }
+    if (!isAiChat && ['IMAGE', 'VIDEO', 'FILE'].includes(selectedMessage.msgType)) {
+      menuActions.push({ key: 'save', label: t('chat.saveMedia'), icon: <SaveIcon />, onClick: handleSaveMessage });
+    }
+    menuActions.push({ key: 'delete', label: t('common.delete'), icon: <DeleteIcon />, danger: true, onClick: handleDeleteMessage });
+  }
 
   return (
     <div className={styles.container}>
@@ -502,13 +1140,20 @@ const ChatWindow = () => {
       </div>
 
       <Picker
-        columns={[models.map((m) => ({ label: m.name, value: m.id }))]}
+        columns={modelPickerColumns}
         visible={showModelPicker}
         onClose={() => setShowModelPicker(false)}
-        value={currentModel ? [currentModel] : []}
+        value={currentModelKey ? [currentModelKey] : []}
         onConfirm={(val) => {
-          if (val && val.length > 0) handleSelectModel(val[0] as string);
-          else setShowModelPicker(false);
+          if (val && val.length > 0) {
+            const key = val[0] as string;
+            const sep = key.indexOf('/');
+            const provider = sep > 0 ? key.slice(0, sep) : undefined;
+            const modelId = sep > 0 ? key.slice(sep + 1) : key;
+            handleSelectModel(modelId, provider);
+          } else {
+            setShowModelPicker(false);
+          }
         }}
       />
 
@@ -546,11 +1191,22 @@ const ChatWindow = () => {
                 onAvatarClick={msg.senderId !== String(AI_ASSISTANT.ID) && msg.senderId !== user?.userId
                   ? () => navigate(`/contacts/${msg.senderId}`)
                   : undefined}
+                onAvatarLongPress={chatType === 1 && !isAiChat && msg.senderId !== String(user?.userId)
+                  ? () => insertMention({ userId: msg.senderId, nickname: getSenderNameFor(msg.senderId) })
+                  : undefined}
+                onMentionClick={(mentionUserId) => {
+                  if (mentionUserId && mentionUserId !== MENTION_ALL) {
+                    navigate(`/contacts/${mentionUserId}`);
+                  }
+                }}
                 onImageClick={(src) => {
                   setImageViewerSrc(src);
                   setImageViewerVisible(true);
                 }}
                 onLongPress={() => handleLongPress(msg)}
+                replySenderName={msg.replyTo ? getSenderNameFor(msg.replyTo.senderId) : undefined}
+                onQuoteClick={msg.replyTo ? () => handleQuoteClick(msg.replyTo!.msgId) : undefined}
+                onResend={msg.status === 'failed' ? () => handleResend(msg) : undefined}
               />
             </Fragment>
           );
@@ -585,36 +1241,93 @@ const ChatWindow = () => {
       </div>
 
       {isRecording && (
-        <div className={styles.recordingBanner}>
-          录制中...
+        <div className={styles.recordOverlay}>
+          <div className={`${styles.recordPanel} ${recordCancelArmed ? styles.recordPanelCancel : ''}`}>
+            <div className={styles.recordWave}>
+              {Array.from({ length: 7 }).map((_, i) => (
+                <span key={i} style={{ animationDelay: `${i * 0.1}s` }} />
+              ))}
+            </div>
+            <div className={styles.recordTime}>{Math.floor(recordSeconds)}″</div>
+            <div className={styles.recordHint}>
+              {recordCancelArmed ? t('chat.releaseToCancel') : t('chat.slideUpToCancel')}
+            </div>
+          </div>
         </div>
       )}
 
-      <div className={styles.inputArea}>
+      {peerTyping && !isAiChat && chatType === 0 && (
+        <div className={styles.typingHint}>
+          <span className={styles.typingDots}>
+            <i />
+            <i />
+            <i />
+          </span>
+          {t('chat.typing')}
+        </div>
+      )}
+
+      {targetDeleted && (
+        <div className={styles.deletedBanner}>{t('chat.userDeleted')}</div>
+      )}
+
+      <div className={styles.inputArea} style={targetDeleted ? { display: 'none' } : undefined}>
+        {quotingMessage && (
+          <div className={styles.quoteBar}>
+            <div className={styles.quoteBarContent}>
+              <span className={styles.quoteBarSender}>{getSenderNameFor(quotingMessage.senderId)}</span>
+              <span className={styles.quoteBarSummary}>
+                {truncatePreview(quotingMessage.content, quotingMessage.msgType, quotingMessage.headers)}
+              </span>
+            </div>
+            <span className={styles.quoteBarClose} title={t('chat.cancelQuote')} onClick={() => setQuotingMessage(null)}>✕</span>
+          </div>
+        )}
         <div className={styles.inputRow}>
           <div
             className={styles.iconBtn}
-            onTouchStart={handleRecordStart}
-            onTouchEnd={handleRecordEnd}
-            onMouseDown={handleRecordStart}
-            onMouseUp={handleRecordEnd}
+            onClick={() => {
+              setInputMode((m) => (m === 'text' ? 'voice' : 'text'));
+              setShowEmoji(false);
+              setShowActions(false);
+            }}
           >
-            <SoundOutline />
+            {inputMode === 'voice' ? <KeyboardIcon /> : <MicIcon />}
           </div>
 
-          <Input
-            value={inputText}
-            onChange={setInputText}
-            onEnterPress={sendTextMessage}
-            placeholder={t('chat.messagePlaceholder')}
-            className={styles.input}
-          />
+          {inputMode === 'voice' ? (
+            <div
+              className={`${styles.holdTalk} ${isRecording ? styles.holdTalkActive : ''}`}
+              onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); handleRecordStart(e); }}
+              onPointerMove={handleRecordMove}
+              onPointerUp={handleRecordEnd}
+              onPointerCancel={handleRecordEnd}
+            >
+              {t('chat.holdToTalk')}
+            </div>
+          ) : (
+            <Input
+              value={inputText}
+              onChange={handleInputChange}
+              onKeyDown={handleInputKeyDown}
+              onEnterPress={sendTextMessage}
+              onFocus={() => { setShowActions(false); setShowEmoji(false); }}
+              placeholder={t('chat.messagePlaceholder')}
+              className={styles.input}
+            />
+          )}
 
-          <div className={styles.iconBtn}>
+          <div
+            className={`${styles.iconBtn} ${showEmoji ? styles.iconBtnActive : ''}`}
+            onClick={() => { setShowEmoji((v) => !v); setShowActions(false); }}
+          >
             <SmileOutline />
           </div>
 
-          <div className={styles.iconBtn} onClick={() => setShowActions(true)}>
+          <div
+            className={`${styles.iconBtn} ${showActions ? styles.iconBtnActive : ''}`}
+            onClick={() => { setShowActions((v) => !v); setShowEmoji(false); }}
+          >
             <AddOutline />
           </div>
         </div>
@@ -623,11 +1336,113 @@ const ChatWindow = () => {
           <Button color="danger" block size="small" onClick={aiStopStreaming} className={styles.sendBtn}>
             {t('chat.stopGeneration')}
           </Button>
-        ) : (inputText.trim() || pendingAttachments.length > 0) ? (
+        ) : (inputMode === 'text' && (inputText.trim() || pendingAttachments.length > 0)) ? (
           <Button color="primary" block size="small" onClick={sendTextMessage} className={styles.sendBtn}>
             {t('common.send')}
           </Button>
         ) : null}
+
+        {showActions && (
+          <div className={styles.actionPanel}>
+            <div className={styles.actionGrid}>
+              <div className={styles.actionItem} onClick={() => albumInputRef.current?.click()}>
+                <div className={`${styles.actionIcon} ${styles.actionAlbum}`}><PicturesOutline /></div>
+                <span>{t('chat.album')}</span>
+              </div>
+              <div className={styles.actionItem} onClick={() => cameraInputRef.current?.click()}>
+                <div className={`${styles.actionIcon} ${styles.actionCamera}`}><CameraOutline /></div>
+                <span>{t('chat.camera')}</span>
+              </div>
+              <div className={styles.actionItem} onClick={() => videoInputRef.current?.click()}>
+                <div className={`${styles.actionIcon} ${styles.actionVideo}`}><VideoOutline /></div>
+                <span>{t('chat.video')}</span>
+              </div>
+              <div className={styles.actionItem} onClick={() => docInputRef.current?.click()}>
+                <div className={`${styles.actionIcon} ${styles.actionFile}`}><FolderOutline /></div>
+                <span>{t('chat.file')}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showEmoji && (
+          <div className={styles.emojiPanelWrap}>
+            <div className={styles.emojiTabs}>
+              <button
+                type="button"
+                className={`${styles.emojiTab} ${emojiTab === 'emoji' ? styles.emojiTabActive : ''}`}
+                onClick={() => setEmojiTab('emoji')}
+              >
+                {t('chat.stickerEmoji')}
+              </button>
+              {!isAiChat && (
+                <button
+                  type="button"
+                  className={`${styles.emojiTab} ${emojiTab === 'sticker' ? styles.emojiTabActive : ''}`}
+                  onClick={() => setEmojiTab('sticker')}
+                >
+                  {t('chat.sticker')}
+                </button>
+              )}
+            </div>
+
+            {emojiTab === 'emoji' || isAiChat ? (
+              <div className={styles.emojiPanel}>
+                {EMOJIS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    className={styles.emojiBtn}
+                    onClick={() => insertEmoji(emoji)}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className={styles.stickerPanel}>
+                <div className={styles.stickerGrid}>
+                  <button
+                    type="button"
+                    className={styles.stickerAdd}
+                    onClick={() => stickerInputRef.current?.click()}
+                  >
+                    <AddOutline />
+                    <span>{t('chat.stickerAdd')}</span>
+                  </button>
+                  {stickers.map((sticker) => (
+                    <div key={sticker.id} className={styles.stickerItem}>
+                      <img
+                        src={sticker.url}
+                        alt=""
+                        className={styles.stickerImg}
+                        onClick={() => sendSticker(sticker)}
+                      />
+                      <button
+                        type="button"
+                        className={styles.stickerDelete}
+                        onClick={() => handleStickerDelete(sticker)}
+                      >
+                        <DeleteOutline />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {stickers.length === 0 && (
+                  <div className={styles.stickerEmpty}>{t('chat.stickerEmpty')}</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        <input
+          ref={stickerInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={handleStickerFileSelect}
+        />
       </div>
 
       {pendingAttachments.length > 0 && (
@@ -650,37 +1465,6 @@ const ChatWindow = () => {
         </div>
       )}
 
-      <Popup visible={showActions} onMaskClick={() => setShowActions(false)} position="bottom">
-        <div className={styles.actionPanel}>
-          <div className={styles.actionGrid}>
-            <div className={styles.actionItem} onClick={() => albumInputRef.current?.click()}>
-              <div className={`${styles.actionIcon}`} style={{ background: '#5b9bd5' }}>
-                <PicturesOutline />
-              </div>
-              <span>{t('chat.album')}</span>
-            </div>
-            <div className={styles.actionItem} onClick={() => cameraInputRef.current?.click()}>
-              <div className={styles.actionIcon} style={{ background: '#6fb648' }}>
-                <CameraOutline />
-              </div>
-              <span>{t('chat.camera')}</span>
-            </div>
-            <div className={styles.actionItem} onClick={() => videoInputRef.current?.click()}>
-              <div className={styles.actionIcon} style={{ background: '#fa9d3b' }}>
-                <VideoOutline />
-              </div>
-              <span>{t('chat.video')}</span>
-            </div>
-            <div className={styles.actionItem} onClick={() => docInputRef.current?.click()}>
-              <div className={styles.actionIcon} style={{ background: '#7c6ee6' }}>
-                <FolderOutline />
-              </div>
-              <span>{t('chat.file')}</span>
-            </div>
-          </div>
-        </div>
-      </Popup>
-
       <input ref={albumInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleFileSelect} />
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleFileSelect} />
       <input ref={videoInputRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={handleFileSelect} />
@@ -696,63 +1480,89 @@ const ChatWindow = () => {
         </div>
       )}
 
-      {/* Context Menu */}
-      <Popup
-        visible={contextMenuVisible}
-        onMaskClick={() => setContextMenuVisible(false)}
-        bodyStyle={{
-          borderTopLeftRadius: 16,
-          borderTopRightRadius: 16,
-          padding: '8px 0 32px',
-        }}
-      >
-        <div className={styles.menuItem} onClick={handleCopyMessage}>
-          {t('chat.copyMessage')}
-        </div>
-        {isAiChat && selectedMessage?.senderId === '0' && (
-          <div className={styles.menuItem} onClick={handleRegenerate}>
-            {t('chat.regenerate')}
+      {/* 消息操作菜单（QQ 风格浮动宫格，主题色跟随应用） */}
+      {contextMenuVisible && (
+        <div className={styles.menuOverlay} onClick={() => setContextMenuVisible(false)}>
+          <div
+            ref={menuRef}
+            className={styles.msgMenu}
+            style={{
+              top: menuPos?.top ?? -9999,
+              left: menuPos?.left ?? -9999,
+              visibility: menuPos ? 'visible' : 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.menuGrid}>
+              {menuActions.map((action) => (
+                <button
+                  key={action.key}
+                  type="button"
+                  className={`${styles.menuCell} ${action.danger ? styles.menuCellDanger : ''}`}
+                  onClick={action.onClick}
+                >
+                  <span className={styles.menuIcon}>{action.icon}</span>
+                  <span className={styles.menuLabel}>{action.label}</span>
+                </button>
+              ))}
+            </div>
+            {menuPos && (
+              <span
+                className={`${styles.menuArrow} ${menuPos.below ? styles.menuArrowUp : styles.menuArrowDown}`}
+                style={{ left: menuPos.arrow }}
+              />
+            )}
           </div>
-        )}
-        {selectedMessage?.senderId === String(user?.userId) && (
-          <div className={styles.menuItem} onClick={handleEditMessage}>
-            {t('chat.editMessage')}
-          </div>
-        )}
-        {isAiChat && selectedMessage?.senderId === String(user?.userId) && (
-          <div className={styles.menuItem} onClick={handleResendMessage}>
-            {t('chat.resendMessage')}
-          </div>
-        )}
-        <div className={`${styles.menuItem} ${styles.dangerItem}`} onClick={handleDeleteMessage}>
-          {t('common.delete')}
         </div>
-        <div className={styles.menuItem} onClick={() => setContextMenuVisible(false)}>
-          {t('common.cancel')}
-        </div>
-      </Popup>
+      )}
 
-      {/* Edit Dialog */}
+      {/* @提及成员选择浮层 */}
       <Popup
-        visible={!!editingMessageId}
-        onMaskClick={handleCancelEdit}
+        visible={mentionPickerVisible}
+        onMaskClick={() => { setMentionPickerVisible(false); setMentionKeyword(''); }}
+        position="bottom"
         bodyStyle={{
           borderTopLeftRadius: 16,
           borderTopRightRadius: 16,
-          padding: '16px',
+          padding: '12px 0 24px',
+          maxHeight: '60vh',
         }}
       >
-        <div className={styles.editDialog}>
-          <textarea
-            className={styles.editTextarea}
-            value={editText}
-            onChange={(e) => setEditText(e.target.value)}
-            rows={6}
-            autoFocus
-          />
-          <div className={styles.editActions}>
-            <Button onClick={handleCancelEdit}>{t('common.cancel')}</Button>
-            <Button color="primary" onClick={handleSaveEdit}>{t('common.save')}</Button>
+        <div className={styles.mentionPanel}>
+          <div className={styles.mentionTitle}>{t('chat.mentionTitle')}</div>
+          <div className={styles.mentionSearch}>
+            <SearchBar
+              placeholder={t('contacts.searchPlaceholder')}
+              value={mentionKeyword}
+              onChange={setMentionKeyword}
+            />
+          </div>
+          <div className={styles.mentionList}>
+            {canMentionAll && !mentionKeyword.trim() && (
+              <div className={styles.mentionItem} onClick={() => insertMention({ userId: MENTION_ALL, nickname: t('chat.mentionAll') })}>
+                <div className={styles.mentionAllAvatar}>@</div>
+                <span className={styles.mentionName}>{t('chat.mentionAll')}</span>
+              </div>
+            )}
+            {mentionableMembers
+              .filter((m) => {
+                const kw = mentionKeyword.trim().toLowerCase();
+                if (!kw) return true;
+                return (m.nickname || '').toLowerCase().includes(kw) || (m.username || '').toLowerCase().includes(kw);
+              })
+              .map((m) => (
+                <div
+                  key={m.userId}
+                  className={styles.mentionItem}
+                  onClick={() => insertMention({ userId: m.userId, nickname: m.nickname || m.username || '' })}
+                >
+                  <SharedAvatar name={m.nickname || m.username} src={m.avatar} size={36} />
+                  <span className={styles.mentionName}>{m.nickname || m.username}</span>
+                </div>
+              ))}
+            {mentionableMembers.length === 0 && (
+              <div className={styles.mentionEmpty}>{t('common.noData')}</div>
+            )}
           </div>
         </div>
       </Popup>

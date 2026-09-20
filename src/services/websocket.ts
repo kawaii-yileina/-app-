@@ -93,15 +93,19 @@ class WebSocketService {
       this.reconnectTimer = setTimeout(() => {
         this.reconnectAttempts++;
         console.log(`Reconnecting... attempt ${this.reconnectAttempts}`);
-        this.connect(token);
+        // 优先使用最新的 access token（可能已被静默续期替换）
+        this.connect(localStorage.getItem('token') || token);
       }, Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000));
     }
   }
 
-  send(message: ChatMessage) {
+  /** 发送消息；连接未就绪时返回 false（调用方据此提示失败，避免静默丢包） */
+  send(message: ChatMessage): boolean {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
+      return true;
     }
+    return false;
   }
 
   onMessage(handler: MessageHandler) {

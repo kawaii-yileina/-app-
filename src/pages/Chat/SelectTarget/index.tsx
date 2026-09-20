@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useContactStore } from '../../../store/useContactStore';
 import { useChatStore } from '../../../store/useChatStore';
 import SharedAvatar from '../../../components/SharedAvatar';
+import { PENDING_FORWARD_KEY, PENDING_OUTGOING_KEY, formatConversationPreview } from '../../../utils/messagePreview';
 import styles from './index.module.css';
 
 interface TargetItem {
@@ -44,7 +45,7 @@ const SelectTarget = () => {
           name: group?.name || t('common.unknownGroup'),
           avatar: group?.avatar || '',
           chatType: 1,
-          subtitle: conv.lastMsgContent,
+          subtitle: formatConversationPreview(conv.lastMsgContent, t),
         };
       }
       const friend = friends.find((f) => f.userId === conv.targetId);
@@ -53,7 +54,7 @@ const SelectTarget = () => {
         name: friend?.nickname || friend?.username || t('common.unknown'),
         avatar: friend?.avatar || '',
         chatType: 0,
-        subtitle: conv.lastMsgContent,
+        subtitle: formatConversationPreview(conv.lastMsgContent, t),
       };
     });
     setRecentTargets(targets);
@@ -91,17 +92,30 @@ const SelectTarget = () => {
   };
 
   const handleSelect = (target: TargetItem) => {
+    let payload: string | null = null;
     if (action === 'recommend') {
-      const cardContent = JSON.stringify({
-        userId: contactUserId,
-        nickname: contactNickname,
-        avatar: contactAvatar,
+      payload = JSON.stringify({
+        msgType: 'CONTACT_CARD',
+        content: JSON.stringify({
+          userId: contactUserId,
+          nickname: contactNickname,
+          avatar: contactAvatar,
+        }),
+        preview: t('chat.contactCard'),
+        successToast: t('chat.cardSent'),
       });
-      sessionStorage.setItem('pending_card', cardContent);
-      navigate(`/chat/${target.id}?type=${target.chatType}`, { replace: true });
     } else {
-      navigate(`/chat/${target.id}?type=${target.chatType}`, { replace: true });
+      // 转发：载荷由来源聊天页写入 pending_forward
+      const forwarded = sessionStorage.getItem(PENDING_FORWARD_KEY);
+      sessionStorage.removeItem(PENDING_FORWARD_KEY);
+      if (forwarded) {
+        payload = JSON.stringify({ ...JSON.parse(forwarded), successToast: t('chat.forwarded') });
+      }
     }
+    if (payload) {
+      sessionStorage.setItem(PENDING_OUTGOING_KEY, payload);
+    }
+    navigate(`/chat/${target.id}?type=${target.chatType}`, { replace: true });
   };
 
   const displayList = keyword.trim() ? results : recentTargets;

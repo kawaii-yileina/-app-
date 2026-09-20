@@ -89,5 +89,5 @@
 
 .zoomSlider {
   width: 60%;
-  accent-color: #07c160;
+  accent-color: var(--c-primary, #ff8fa3);
 }

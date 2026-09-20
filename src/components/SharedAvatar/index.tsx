@@ -1,4 +1,5 @@
 import { resolveFileUrl } from '../../utils/fileUrl';
+import { avatarTint } from '../../utils/avatarColor';
 import styles from './index.module.css';
 
 interface Props {
@@ -24,7 +25,10 @@ const SharedAvatar = ({ name, src, size = 40, className }: Props) => {
   }
 
   return (
-    <div className={`${styles.avatar} ${className || ''}`} style={sizeStyle}>
+    <div
+      className={`${styles.avatar} ${className || ''}`}
+      style={{ ...sizeStyle, background: avatarTint(name || '') }}
+    >
       {name?.charAt(0) || '?'}
     </div>
   );

@@ -2,22 +2,22 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-color, #f8f9fa);
+  background: var(--c-bg);
 }
 
 .navBar {
-  background: #f7f7f7;
-  --title-font-size: 17px;
+  background: var(--c-surface);
+  --title-font-size: var(--c-font-h2);
   --height: 50px;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--c-border);
 }
 
 .navBar :global(.adm-nav-bar-back-arrow) {
-  color: #111;
+  color: var(--c-ink);
 }
 
 .navBar :global(.adm-nav-bar-title) {
-  color: #111;
+  color: var(--c-ink);
   font-weight: 600;
 }
 
@@ -26,48 +26,53 @@
   align-items: center;
   gap: 16px;
   padding: 20px 16px;
-  background: var(--card-bg, white);
-  margin: 16px 16px 0;
-  border-radius: 16px;
+  margin: 14px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius-xl);
+  box-shadow: var(--c-shadow-sm);
   cursor: pointer;
 }
 
 .avatarSection:active {
-  background: var(--card-bg-active, #f0f0f0);
+  background: var(--c-primary-tint);
 }
 
 .avatarLabel {
-  font-size: 15px;
-  color: var(--text-secondary, #666);
+  font-size: var(--c-font-body);
+  color: var(--c-text-secondary);
 }
 
 .form {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
-  margin: 16px;
-  background: var(--card-bg, white);
-  border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  margin: 0 14px 14px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius-xl);
+  box-shadow: var(--c-shadow-sm);
 }
 
 .input {
-  --background: var(--input-bg, #f5f6f8);
-  --border-radius: 12px;
+  --background: var(--c-surface-2);
+  --border-radius: var(--c-radius-md);
 }
 
 .disabledInput {
-  --background: var(--input-bg, #f0f0f0);
-  --border-radius: 12px;
-  --text-color: #999;
+  --background: var(--c-surface-2);
+  --border-radius: var(--c-radius-md);
+  --text-color: var(--c-text-muted);
 }
 
 .footer {
   padding: 16px 20px;
-  background: var(--card-bg, white);
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
   border-radius: 20px 20px 0 0;
 }
 
 .saveBtn {
-  --border-radius: 14px;
+  --border-radius: var(--c-radius-xl);
+  --background: var(--c-primary);
 }

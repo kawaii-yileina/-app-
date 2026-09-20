@@ -95,14 +95,34 @@ function getHeaders(): Record<string, string> {
   };
 }
 
+/**
+ * 统一请求封装：HTTP 非 2xx 或后端 Result.code 非 200 时抛错，
+ * 避免错误被静默吞掉（调用方 catch 后向用户展示）。
+ */
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, { headers: getHeaders(), ...init });
+  if (!response.ok) {
+    const err = await response.json().catch(() => null);
+    throw new Error(err?.message || `请求失败 (HTTP ${response.status})`);
+  }
+  const result = await response.json();
+  if (result && typeof result.code === 'number' && result.code !== 200) {
+    throw new Error(result.message || `请求失败 (code ${result.code})`);
+  }
+  return result.data as T;
+}
+
+function jsonBody(body: unknown): RequestInit {
+  return { method: 'POST', headers: getHeaders(), body: JSON.stringify(body) };
+}
+
 // ─── 同步对话（通过后端代理）───
 
 export async function chat(sessionId: string, message: MessageContent): Promise<ChatResponse> {
-  const response = await fetch(`${AI_API}/chat`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({ message: typeof message === 'string' ? message : JSON.stringify(message), sessionId }),
-  });
+  const response = await fetch(`${AI_API}/chat`, jsonBody({
+    message: typeof message === 'string' ? message : JSON.stringify(message),
+    sessionId,
+  }));
   return response.json();
 }
 
@@ -188,35 +208,42 @@ export async function createSession(
   sessionId: string,
   options?: { title?: string; systemPrompt?: string; model?: string }
 ): Promise<void> {
-  await fetch(`${AI_API}/sessions`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({ sessionId, ...options }),
-  });
+  await request<void>(`${AI_API}/sessions`, jsonBody({ sessionId, ...options }));
 }
 
-export async function getSessions(): Promise<string[]> {
-  const res = await fetch(`${AI_API}/sessions`, { headers: getHeaders() });
-  const data = await res.json();
-  return data.data || [];
+export interface SessionSummary {
+  sessionId: string;
+  /** 会话标题，无元数据时为 null（前端回退展示） */
+  title: string | null;
+}
+
+export interface SessionDetail {
+  sessionId: string;
+  /** 当前锁定的模型（未锁为 null） */
+  model: string | null;
+  title: string | null;
+}
+
+export async function getSessions(): Promise<SessionSummary[]> {
+  return request<SessionSummary[]>(`${AI_API}/sessions`);
+}
+
+/** 会话详情：回显当前锁定模型与标题 */
+export async function getSessionDetail(sessionId: string): Promise<SessionDetail> {
+  return request<SessionDetail>(`${AI_API}/sessions/${sessionId}/detail`);
 }
 
 export async function getSessionHistory(sessionId: string): Promise<SessionMessage[]> {
-  const res = await fetch(`${AI_API}/sessions/${sessionId}/history`, { headers: getHeaders() });
-  const data = await res.json();
-  return data.data || [];
+  return request<SessionMessage[]>(`${AI_API}/sessions/${sessionId}/history`);
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
-  await fetch(`${AI_API}/sessions/${sessionId}`, {
-    method: 'DELETE',
-    headers: getHeaders(),
-  });
+  await request<void>(`${AI_API}/sessions/${sessionId}`, { method: 'DELETE', headers: getHeaders() });
 }
 
 /** 截断会话消息：保留前 keepCount 条（覆盖语义） */
 export async function truncateMessages(sessionId: string, keepCount: number): Promise<void> {
-  await fetch(`${AI_API}/sessions/${sessionId}/messages?keep=${keepCount}`, {
+  await request<void>(`${AI_API}/sessions/${sessionId}/messages?keep=${keepCount}`, {
     method: 'DELETE',
     headers: getHeaders(),
   });
@@ -224,10 +251,11 @@ export async function truncateMessages(sessionId: string, keepCount: number): Pr
 
 export async function editMessage(
   sessionId: string,
-  messageId: number,
+  // 注意：MySQL 雪花 id 超出 JS Number 安全范围，必须保持字符串传递
+  messageId: string,
   content: string
 ): Promise<void> {
-  await fetch(`${AI_API}/sessions/${sessionId}/messages/${messageId}`, {
+  await request<void>(`${AI_API}/sessions/${sessionId}/messages/${messageId}`, {
     method: 'PATCH',
     headers: getHeaders(),
     body: JSON.stringify({ content }),
@@ -237,17 +265,11 @@ export async function editMessage(
 // ─── 配置 ───
 
 export async function getConfig(): Promise<Record<string, unknown>> {
-  const res = await fetch(`${AI_API}/config`, { headers: getHeaders() });
-  const data = await res.json();
-  return data.data || {};
+  return request<Record<string, unknown>>(`${AI_API}/config`);
 }
 
-export async function saveConfig(config: Record<string, unknown>): Promise<void> {
-  await fetch(`${AI_API}/config`, {
-    method: 'PUT',
-    headers: getHeaders(),
-    body: JSON.stringify(config),
-  });
+export async function saveConfig(config: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>(`${AI_API}/config`, jsonBody(config));
 }
 
 // ─── 模型管理 ───
@@ -255,18 +277,23 @@ export async function saveConfig(config: Record<string, unknown>): Promise<void>
 export interface HermesModel {
   id: string;
   name: string;
+  /** 所属渠道（如 xiaomi / deepseek / zai），锁定模型时必须一并传给 Hermes */
+  provider?: string;
 }
 
 export async function getModels(): Promise<HermesModel[]> {
-  const res = await fetch(`${AI_API}/models`, { headers: getHeaders() });
-  const data = await res.json();
-  return data.data || [];
+  return request<HermesModel[]>(`${AI_API}/models`);
 }
 
-export async function lockModel(sessionId: string, model: string, provider?: string): Promise<void> {
-  await fetch(`${AI_API}/sessions/${sessionId}/model`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({ model, provider }),
-  });
+export async function lockModel(
+  sessionId: string,
+  model: string,
+  provider?: string,
+  modelOptions?: Record<string, unknown>
+): Promise<void> {
+  await request<void>(`${AI_API}/sessions/${sessionId}/model`, jsonBody({
+    model,
+    provider,
+    modelOptions,
+  }));
 }

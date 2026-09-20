@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
-import { ConfigProvider } from 'antd-mobile';
+import { ConfigProvider, Toast } from 'antd-mobile';
 import zhCN from 'antd-mobile/es/locales/zh-CN';
 import { useTranslation } from 'react-i18next';
 import { App as CapApp } from '@capacitor/app';
@@ -11,7 +11,10 @@ import { useContactStore } from './store/useContactStore';
 import { contactApi, messageApi } from './api';
 import wsService from './services/websocket';
 import type { ChatMessage, Message } from './types';
+import { SystemEventType, parseSystemEventType } from './types';
+import { truncatePreview, parseReplyInfo, parseMentions } from './utils/messagePreview';
 import Login from './pages/Login';
+import ResetPassword from './pages/Login/ResetPassword';
 import Main from './pages/Main';
 import ChatList from './pages/Main/ChatList';
 import Contacts from './pages/Main/Contacts';
@@ -25,6 +28,8 @@ import FriendRequests from './pages/Contacts/FriendRequests';
 import AiConfig from './pages/Profile/AiConfig';
 import MyInfo from './pages/Profile/MyInfo';
 import Settings from './pages/Profile/Settings';
+import ChangePassword from './pages/Profile/Settings/ChangePassword';
+import DeleteAccount from './pages/Profile/Settings/DeleteAccount';
 import SelectTarget from './pages/Chat/SelectTarget';
 
 const BackButtonHandler = () => {
@@ -94,6 +99,8 @@ const wsMessageToMessage = (msg: ChatMessage): Message => ({
   content: msg.content,
   createdAt: new Date().toISOString(),
   headers: msg.headers,
+  replyTo: parseReplyInfo(msg.headers?.replyTo),
+  mentions: parseMentions(msg.headers?.mentions),
 });
 
 const WebSocketProvider = () => {
@@ -120,18 +127,110 @@ const WebSocketProvider = () => {
     const unsubscribe = wsService.onMessage((message: ChatMessage) => {
       if (message.type === 'SYSTEM') {
         const content = message.content || '';
-        const userId = content.includes(':') ? content.split(':')[1] : '';
-        if (content.includes('online')) {
-          if (userId) addOnlineUser(userId);
-        } else if (content.includes('offline')) {
-          if (userId) removeOnlineUser(userId);
+        const headers = message.headers || {};
+
+        // ACK 消息：持久化成功后的确认
+        if (headers.ack === 'true') {
+          const clientMsgId = headers.clientMsgId || '';
+          const serverMsgId = headers.serverMsgId || '';
+          if (clientMsgId) {
+            // 清除超时定时器
+            useChatStore.getState().clearPending(clientMsgId);
+            // 更新本地消息的 msgId 为服务端 id，状态为 sent
+            const messages = useChatStore.getState().messages;
+            for (const [key, list] of Object.entries(messages)) {
+              const found = list.find(m => m.msgId === clientMsgId);
+              if (found) {
+                useChatStore.getState().updateMessage(key, clientMsgId, {
+                  msgId: serverMsgId || clientMsgId,
+                  status: 'sent',
+                });
+                break;
+              }
+            }
+          }
+          return;
         }
+
+        const userId = content.includes(':') ? content.split(':')[1] : '';
+        const eventType = parseSystemEventType(content);
+
+        switch (eventType) {
+          case SystemEventType.ONLINE:
+            if (userId) addOnlineUser(userId);
+            break;
+          case SystemEventType.OFFLINE:
+            if (userId) removeOnlineUser(userId);
+            break;
+          case SystemEventType.FRIEND_REQUEST:
+          case SystemEventType.FRIEND_ACCEPT:
+          case SystemEventType.FRIEND_REJECT:
+            // 好友关系变化，刷新好友列表
+            contactApi.getFriends().then(res => {
+              if (res.code === 200) useContactStore.getState().setFriends(res.data);
+            }).catch(() => {});
+            break;
+          case SystemEventType.GROUP_ADD:
+          case SystemEventType.GROUP_KICK:
+          case SystemEventType.GROUP_QUIT:
+          case SystemEventType.GROUP_TRANSFER:
+          case SystemEventType.GROUP_RENAME:
+            // 群组变化，刷新群组列表
+            contactApi.getGroups().then(res => {
+              if (res.code === 200) useContactStore.getState().setGroups(res.data);
+            }).catch(() => {});
+            break;
+          case SystemEventType.MESSAGE_RECALL: {            // 消息撤回：content 格式 message_recall:msgId，本地替换为撤回态
+            const recalledMsgId = content.split(':')[1] || '';
+            if (recalledMsgId) {
+              const messagesMap = useChatStore.getState().messages;
+              for (const [key, list] of Object.entries(messagesMap)) {
+                if (list.some(m => m.msgId === recalledMsgId)) {
+                  useChatStore.getState().updateMessage(key, recalledMsgId, {
+                    msgType: 'RECALL',
+                    content: '',
+                  });
+                  break;
+                }
+              }
+            }
+            // 撤回可能改变会话预览（last_msg_content），以后端为准刷新列表
+            messageApi.getConversations().then(res => {
+              if (res.code === 200) setConversations(res.data);
+            }).catch(() => {});
+            break;
+          }
+          case SystemEventType.RATE_LIMITED: {
+            // 发送频率超限：后端已阻断该消息，本地置失败并提示
+            const rateLimitedClientMsgId = headers.clientMsgId || '';
+            if (rateLimitedClientMsgId) {
+              useChatStore.getState().clearPending(rateLimitedClientMsgId);
+              const messagesMap = useChatStore.getState().messages;
+              for (const [key, list] of Object.entries(messagesMap)) {
+                if (list.some(m => m.msgId === rateLimitedClientMsgId)) {
+                  useChatStore.getState().updateMessage(key, rateLimitedClientMsgId, { status: 'failed' });
+                  break;
+                }
+              }
+            }
+            Toast.show({ content: t('chat.rateLimited') });
+            break;
+          }
+          default:
+            break;
+        }
+      } else if (message.type === 'TYPING') {
+        // 输入中状态（仅私聊）：更新对应会话的输入中时间戳，不当作消息入库
+        const typingKey = `${message.from}_0`;
+        useChatStore.getState().setTyping(typingKey);
       } else {
         const targetId = message.group ? message.to : message.from;
         const key = `${targetId}_${message.group ? 1 : 0}`;
         const isMine = message.from === String(user?.userId);
         if (!isMine) {
           addMessage(key, wsMessageToMessage(message));
+          // 对方已发出消息，清除"正在输入"状态
+          useChatStore.getState().clearTyping(key);
         }
 
         const isAi = message.from === '0' || message.to === '0';
@@ -183,22 +282,6 @@ const loadInitialData = async (
   }
 };
 
-const truncatePreview = (content: string, type: string, headers?: Record<string, string>) => {
-  switch (type) {
-    case 'IMAGE': return '[图片]';
-    case 'VIDEO': return '[视频]';
-    case 'VOICE': return `[语音] ${Math.round(Number(headers?.duration) || 0)}"`;
-    case 'CONTACT_CARD': return '[个人名片]';
-    case 'FILE': {
-      const name = headers?.originalName || '';
-      const text = `[文件] ${name}`;
-      return text.length > 30 ? text.substring(0, 30) + '...' : text;
-    }
-    default:
-      return content.length > 30 ? content.substring(0, 30) + '...' : content;
-  }
-};
-
 function App() {
   return (
       <ConfigProvider locale={zhCN}>
@@ -208,6 +291,7 @@ function App() {
           <BackButtonHandler />
           <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route
             path="/"
             element={
@@ -231,6 +315,8 @@ function App() {
           <Route path="/profile/ai" element={<PrivateRoute><AiConfig /></PrivateRoute>} />
           <Route path="/profile/info" element={<PrivateRoute><MyInfo /></PrivateRoute>} />
           <Route path="/profile/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+          <Route path="/profile/change-password" element={<PrivateRoute><ChangePassword /></PrivateRoute>} />
+          <Route path="/profile/delete-account" element={<PrivateRoute><DeleteAccount /></PrivateRoute>} />
           <Route path="/select-target" element={<PrivateRoute><SelectTarget /></PrivateRoute>} />
         </Routes>
       </BrowserRouter>

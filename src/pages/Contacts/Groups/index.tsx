@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { NavBar, Toast, Dialog, Input } from 'antd-mobile';
+import { AddOutline } from 'antd-mobile-icons';
 import { useTranslation } from 'react-i18next';
 import { contactApi } from '../../../api';
 import { useContactStore } from '../../../store/useContactStore';
+import { avatarTint } from '../../../utils/avatarColor';
 import type { Group } from '../../../types';
 import styles from './index.module.css';
 
@@ -47,7 +49,7 @@ const Groups = () => {
       </NavBar>
 
       <div className={styles.createRow} onClick={() => setShowCreateDialog(true)}>
-        <div className={styles.createIcon}>＋</div>
+        <div className={styles.createIcon}><AddOutline /></div>
         <span className={styles.createText}>{t('contacts.createGroup')}</span>
       </div>
 
@@ -57,7 +59,7 @@ const Groups = () => {
         ) : (
           groups.map((group) => (
             <div key={group.id} className={styles.item} onClick={() => handleGroupClick(group)}>
-              <div className={styles.avatar}>{group.name?.charAt(0)}</div>
+              <div className={styles.avatar} style={{ background: avatarTint(group.name || '') }}>{group.name?.charAt(0)}</div>
               <div className={styles.info}>
                 <span className={styles.name}>{group.name}</span>
               </div>

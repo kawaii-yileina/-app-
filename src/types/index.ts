@@ -6,7 +6,10 @@ export interface User {
   signature: string;
 }
 
-export interface Friend extends User {}
+export interface Friend extends User {
+  /** 好友是否已注销账号 */
+  deleted?: boolean;
+}
 
 export interface SearchUser extends User {
   isFriend: boolean;
@@ -36,6 +39,15 @@ export interface GroupMember {
   avatar: string;
   role: number;
   joinedAt: string;
+  /** 成员是否已注销账号 */
+  deleted?: boolean;
+}
+
+export interface ReplyInfo {
+  msgId: string;
+  senderId: string;
+  msgType: string;
+  summary: string;
 }
 
 export interface Message {
@@ -50,6 +62,15 @@ export interface Message {
   headers?: Record<string, string>;
   status?: 'sending' | 'sent' | 'failed';
   progress?: number;
+  /** 引用回复信息（历史消息由后端 replyTo JSON 解析而来） */
+  replyTo?: ReplyInfo;
+  /** @提及成员（历史消息由后端 mentions JSON 解析而来） */
+  mentions?: MentionInfo[];
+}
+
+export interface MentionInfo {
+  userId: string;
+  nickname: string;
 }
 
 export interface Conversation {
@@ -60,6 +81,8 @@ export interface Conversation {
   lastMsgContent: string;
   lastMsgTime: string;
   unreadCount: number;
+  /** 是否有人 @ 我（1 为是） */
+  mentioned?: number;
 }
 
 export interface ChatMessage {
@@ -72,9 +95,52 @@ export interface ChatMessage {
   headers?: Record<string, string>;
 }
 
+/** SYSTEM 消息事件类型（与后端 SystemEvent 枚举一致） */
+export const SystemEventType = {
+  ONLINE: 'online',
+  OFFLINE: 'offline',
+  FRIEND_REQUEST: 'friend_request',
+  FRIEND_ACCEPT: 'friend_accept',
+  FRIEND_REJECT: 'friend_reject',
+  GROUP_ADD: 'group_add',
+  GROUP_KICK: 'group_kick',
+  GROUP_QUIT: 'group_quit',
+  GROUP_TRANSFER: 'group_transfer',
+  GROUP_RENAME: 'group_rename',
+  MESSAGE_RECALL: 'message_recall',
+  RATE_LIMITED: 'rate_limited',
+} as const;
+
+/** 表情包收藏项 */
+export interface EmojiSticker {
+  id: string;
+  userId: string;
+  url: string;
+  createdAt: string;
+}
+
+/** 会话列表撤回预览占位（与后端 ChatConstants.RECALL_PREVIEW_* 一致） */
+export const RECALL_PREVIEW = {
+  SELF: '__RECALL_SELF__',
+  OTHER: '__RECALL_OTHER__',
+} as const;
+
+/**
+ * 从 SYSTEM 消息 content 解析事件类型（冒号前第一段）。
+ * content 格式：eventType:arg1:arg2:...
+ */
+export function parseSystemEventType(content: string): string {
+  if (!content) return '';
+  const idx = content.indexOf(':');
+  return idx > 0 ? content.substring(0, idx) : content;
+}
+
 export interface LoginResponse {
   token: string;
+  /** 长效刷新令牌，用于 access token 过期后静默续期 */
+  refreshToken: string;
   userId: string;
+  username?: string;
   nickname: string;
   avatar: string;
 }

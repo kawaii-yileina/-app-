@@ -117,7 +117,7 @@ export async function syncChat(sessionId: string, message: MessageContent): Prom
 
 // ─── 会话管理 ───
 
-export async function loadSessions(): Promise<string[]> {
+export async function loadSessions(): Promise<hermes.SessionSummary[]> {
   return hermes.getSessions();
 }
 

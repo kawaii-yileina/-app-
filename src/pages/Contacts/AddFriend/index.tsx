@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { NavBar, Input, Button, Toast } from 'antd-mobile';
 import { useTranslation } from 'react-i18next';
 import { userApi, contactApi } from '../../../api';
+import { avatarTint } from '../../../utils/avatarColor';
 import type { SearchUser } from '../../../types';
 import styles from './index.module.css';
 
@@ -119,7 +120,7 @@ const AddFriend = () => {
         )}
         {results.map((user, index) => (
           <div key={user.userId} className={styles.resultItem} onClick={() => handleOpenDetail(user)}>
-            <div className={styles.avatar}>{user.nickname?.charAt(0)}</div>
+            <div className={styles.avatar} style={{ background: avatarTint(user.nickname || '') }}>{user.nickname?.charAt(0)}</div>
             <div className={styles.info}>
               <div className={styles.name}>{user.nickname}</div>
               <div className={styles.sub}>{`${t('contacts.wechat')}: ${user.username}`}</div>

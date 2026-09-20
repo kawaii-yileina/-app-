@@ -6,10 +6,12 @@ import { useChatStore } from '../../../store/useChatStore';
 import { useContactStore } from '../../../store/useContactStore';
 import { useOnlineStore } from '../../../store/useOnlineStore';
 import { AI_ASSISTANT } from '../../../types';
+import { formatConversationPreview } from '../../../utils/messagePreview';
 import { aiApi, messageApi } from '../../../api';
 import { createSession, getModels, type HermesModel } from '../../../api/hermes';
 import { resolveFileUrl } from '../../../utils/fileUrl';
 import type { Conversation } from '../../../types';
+import { avatarTint } from '../../../utils/avatarColor';
 import styles from './index.module.css';
 
 const ChatList = () => {
@@ -19,13 +21,15 @@ const ChatList = () => {
   const friends = useContactStore((s) => s.friends);
   const groups = useContactStore((s) => s.groups);
   const onlineUsers = useOnlineStore((s) => s.onlineUsers);
-  const [aiSessions, setAiSessions] = useState<string[]>([]);
+  const [aiSessions, setAiSessions] = useState<{ sessionId: string; title: string | null }[]>([]);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [sessionTitle, setSessionTitle] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [models, setModels] = useState<HermesModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [showModelPicker, setShowModelPicker] = useState(false);
+
+  const formatPreview = (content: string) => formatConversationPreview(content, t);
 
   useEffect(() => {
     loadAiSessions();
@@ -160,21 +164,22 @@ const ChatList = () => {
             <span>{t('chat.noSessions')}</span>
           </div>
         ) : (
-          aiSessions.map((sessionId) => (
+          aiSessions.map((session) => (
             <SwipeAction
-              key={sessionId}
+              key={session.sessionId}
+              className={styles.swipeItem}
               rightActions={[
                 {
                   key: 'delete',
                   text: t('common.delete'),
                   color: 'danger',
-                  onClick: () => handleDeleteAiSession(sessionId),
+                  onClick: () => handleDeleteAiSession(session.sessionId),
                 },
               ]}
             >
               <div
                 className={styles.item}
-                onClick={() => handleAiSessionClick(sessionId)}
+                onClick={() => handleAiSessionClick(session.sessionId)}
               >
                 <div className={styles.avatarWrapper}>
                   <div className={styles.aiAvatar}>
@@ -183,7 +188,7 @@ const ChatList = () => {
                 </div>
                 <div className={styles.info}>
                   <div className={styles.nameRow}>
-                    <span className={styles.name}>{sessionId}</span>
+                    <span className={styles.name}>{session.title || AI_ASSISTANT.NAME}</span>
                   </div>
                   <div className={styles.msgRow}>
                     <span className={styles.msg}>{t('chat.clickToChatAI')}</span>
@@ -207,6 +212,7 @@ const ChatList = () => {
           return (
             <SwipeAction
               key={convKey}
+              className={styles.swipeItem}
               rightActions={[
                 {
                   key: 'delete',
@@ -230,7 +236,7 @@ const ChatList = () => {
                       {info.avatar ? (
                         <img src={resolveFileUrl(info.avatar)} alt={info.name} className={styles.avatar} />
                       ) : (
-                        <div className={styles.avatar}>
+                        <div className={styles.avatar} style={{ background: avatarTint(info.name || conv.targetId) }}>
                           {info.name?.charAt(0)}
                         </div>
                       )}
@@ -248,9 +254,16 @@ const ChatList = () => {
                     </span>
                   </div>
                   <div className={styles.msgRow}>
-                    <span className={styles.msg}>{conv.lastMsgContent}</span>
+                    {conv.mentioned ? (
+                      <span className={styles.mentionedTag}>{t('chat.mentionedMe')}</span>
+                    ) : null}
+                    <span className={styles.msg}>{formatPreview(conv.lastMsgContent)}</span>
                     {conv.unreadCount > 0 && (
-                      <Badge content={conv.unreadCount > 99 ? '99+' : String(conv.unreadCount)} className={styles.badge} />
+                      <Badge
+                        content={conv.unreadCount > 99 ? '99+' : String(conv.unreadCount)}
+                        color="var(--c-primary)"
+                        className={styles.badge}
+                      />
                     )}
                   </div>
                 </div>

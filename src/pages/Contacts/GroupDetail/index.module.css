@@ -2,40 +2,43 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #ededed;
+  background: var(--c-bg);
 }
 
 .navBar {
-  background: #f7f7f7;
-  --title-font-size: 17px;
+  background: var(--c-surface);
+  --title-font-size: var(--c-font-h2);
   --height: 50px;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--c-border);
 }
 
 .navBar :global(.adm-nav-bar-back-arrow) {
-  color: #111;
+  color: var(--c-ink);
 }
 
 .navBar :global(.adm-nav-bar-title) {
-  color: #111;
+  color: var(--c-ink);
   font-weight: 600;
 }
 
 .card {
-  background: #fff;
-  padding: 30px 20px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius-xl);
+  box-shadow: var(--c-shadow-sm);
+  padding: 28px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-top: 8px;
+  margin: 14px;
 }
 
 .avatar {
   width: 72px;
   height: 72px;
-  border-radius: 50%;
-  background: #6fb648;
-  color: #fff;
+  border-radius: var(--c-avatar-radius, 34%);
+  background: #ffd9df;
+  color: #3a3335;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -45,26 +48,29 @@
 
 .groupName {
   font-size: 20px;
-  font-weight: 600;
-  color: #111;
+  font-weight: 700;
+  color: var(--c-ink);
   margin-top: 14px;
 }
 
 .memberCount {
-  font-size: 14px;
-  color: #999;
+  font-size: var(--c-font-sm);
+  color: var(--c-text-muted);
   margin-top: 6px;
 }
 
 .memberSection {
-  background: #fff;
-  margin-top: 8px;
-  padding: 12px 16px 20px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius-xl);
+  box-shadow: var(--c-shadow-sm);
+  margin: 0 14px 14px;
+  padding: 14px 16px 20px;
 }
 
 .gridHeader {
-  font-size: 14px;
-  color: #888;
+  font-size: var(--c-font-sm);
+  color: var(--c-text-secondary);
   margin-bottom: 14px;
 }
 
@@ -84,8 +90,8 @@
 }
 
 .cellName {
-  font-size: 12px;
-  color: #333;
+  font-size: var(--c-font-xs);
+  color: var(--c-text-secondary);
   margin-top: 6px;
   max-width: 56px;
   overflow: hidden;
@@ -94,9 +100,10 @@
 }
 
 .addAvatar {
-  background: #f5f5f5;
-  color: #999;
-  font-size: 28px;
+  background: var(--c-surface-2);
+  border: 1px dashed var(--c-border);
+  color: var(--c-text-muted);
+  font-size: 26px;
 }
 
 .cell .avatar {
@@ -111,57 +118,66 @@
   right: 0;
   width: 14px;
   height: 14px;
-  background: #fa9d3b;
+  background: var(--c-primary);
   border-radius: 50%;
-  border: 2px solid #fff;
+  border: 2px solid var(--c-surface);
 }
 
 .menu {
-  background: #fff;
-  margin-top: 8px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius-xl);
+  box-shadow: var(--c-shadow-sm);
+  margin: 0 14px 14px;
+  overflow: hidden;
 }
 
 .menuItem {
-  height: 52px;
+  height: 54px;
   display: flex;
   align-items: center;
   padding: 0 16px;
-  font-size: 15px;
-  color: #111;
+  font-size: var(--c-font-body);
+  color: var(--c-ink);
   cursor: pointer;
 }
 
 .menuItem:active {
-  background: #f2f2f2;
+  background: var(--c-primary-tint);
 }
 
 .menuItem + .menuItem {
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--c-divider);
 }
 
 .quit {
-  margin-top: 8px;
-  background: #fff;
-  height: 52px;
+  margin: 0 14px 20px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius-xl);
+  box-shadow: var(--c-shadow-sm);
+  height: 54px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  color: #fa5151;
+  font-size: var(--c-font-h2);
+  color: var(--c-danger);
   cursor: pointer;
 }
 
 .quit:active {
-  background: #f2f2f2;
+  background: var(--c-primary-tint);
 }
 
 .renameInput {
   width: 100%;
   border: none;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--c-divider);
   outline: none;
-  font-size: 16px;
+  font-size: var(--c-font-body);
   padding: 8px 0;
+  background: transparent;
+  color: var(--c-text);
 }
 
 .addPopup {
@@ -171,31 +187,42 @@
 }
 
 .popupTitle {
-  font-size: 17px;
+  font-size: var(--c-font-h2);
   font-weight: 600;
   text-align: center;
   margin-bottom: 16px;
+  color: var(--c-ink);
 }
 
 .popupEmpty {
   text-align: center;
   padding: 40px 0;
-  color: #999;
+  color: var(--c-text-muted);
 }
 
 .popupItem {
   display: flex;
   align-items: center;
   padding: 12px 8px;
+  border-radius: var(--c-radius-md);
   cursor: pointer;
 }
 
 .popupItem:active {
-  background: #f2f2f2;
+  background: var(--c-primary-tint);
 }
 
 .popupName {
-  font-size: 16px;
-  color: #111;
+  font-size: var(--c-font-h2);
+  color: var(--c-ink);
   margin-left: 12px;
+}
+
+.deletedTag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: var(--c-font-xs, 11px);
+  color: var(--c-text-muted);
+  background: var(--c-surface-2);
+  border-radius: var(--c-radius-sm);
 }

@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../../store/useAuthStore';
 import { authApi, fileApi } from '../../../api';
 import { resolveFileUrl } from '../../../utils/fileUrl';
-import { RightOutline } from 'antd-mobile-icons';
+import { RightOutline, SetOutline, StarOutline, UserOutline } from 'antd-mobile-icons';
 import AvatarEditor from '../../../components/AvatarEditor';
 import SharedAvatar from '../../../components/SharedAvatar';
 import styles from './index.module.css';
@@ -61,37 +61,36 @@ const Profile = () => {
 
       <List className={styles.list}>
         <List.Item
-          prefix={<span style={{ fontSize: 20 }}> </span>}
+          prefix={<UserOutline />}
           onClick={() => navigate('/profile/info')}
-          extra={<RightOutline />}
         >
           {t('profile.myInfo')}
         </List.Item>
         <List.Item
-          prefix={<span style={{ fontSize: 20 }}> </span>}
+          prefix={<StarOutline />}
           onClick={() => navigate('/profile/ai')}
-          extra={<RightOutline />}
         >
           {t('profile.aiSettings')}
         </List.Item>
         <List.Item
-          prefix={<span style={{ fontSize: 20 }}> </span>}
+          prefix={<SetOutline />}
           onClick={() => navigate('/profile/settings')}
-          extra={<RightOutline />}
         >
           {t('profile.settings')}
         </List.Item>
       </List>
 
-      <Button
-        block
-        color="danger"
-        size="large"
-        onClick={handleLogout}
-        className={styles.logoutButton}
-      >
-        {t('profile.logout')}
-      </Button>
+      <div className={styles.logoutWrapper}>
+        <Button
+          block
+          color="danger"
+          size="large"
+          onClick={handleLogout}
+          className={styles.logoutButton}
+        >
+          {t('profile.logout')}
+        </Button>
+      </div>
 
       <AvatarEditor
         visible={showEditor}

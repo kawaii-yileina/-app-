@@ -12,22 +12,14 @@
   width: 40px;
   height: 40px;
   flex-shrink: 0;
-  border-radius: 50%;
-  background: #fff;
+  border-radius: var(--c-avatar-radius, 34%);
+  background: #ffd9df;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 16px;
   font-weight: 600;
-  color: #fff;
-}
-
-.container:not(.self) .avatar {
-  background: #95afc0;
-}
-
-.container.self .avatar {
-  background: #07c160;
+  color: #3a3335;
 }
 
 .bubbleWrapper {
@@ -39,7 +31,7 @@
   width: 40px;
   height: 40px;
   flex-shrink: 0;
-  border-radius: 50%;
+  border-radius: var(--c-avatar-radius, 34%);
   object-fit: cover;
 }
 
@@ -59,12 +51,12 @@
 .bubble {
   position: relative;
   padding: 9px 12px;
-  border-radius: 6px;
-  background: #fff;
+  border-radius: var(--c-radius-sm);
+  background: var(--c-surface);
   word-break: break-word;
   font-size: 16px;
   line-height: 1.5;
-  color: #111;
+  color: var(--c-text);
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
@@ -82,16 +74,16 @@
 
 .container:not(.self) .bubble::before {
   left: -9px;
-  border-right-color: #fff;
+  border-right-color: var(--c-surface);
 }
 
 .self .bubble {
-  background: #95ec69;
+  background: var(--c-warm);
 }
 
 .self .bubble::before {
   right: -9px;
-  border-left-color: #95ec69;
+  border-left-color: var(--c-warm);
 }
 
 .text {
@@ -105,6 +97,20 @@
   border-radius: 6px;
   cursor: pointer;
   margin-bottom: 4px;
+}
+
+.imageFailed {
+  width: 160px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  background: var(--c-warm);
+  color: var(--c-text-muted);
+  font-size: 12px;
+  cursor: pointer;
 }
 
 .video {
@@ -156,17 +162,6 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-.file {
-  display: block;
-  padding: 8px 12px;
-  background: #f2f2f2;
-  border-radius: 6px;
-  text-decoration: none;
-  color: #576b95;
-  font-size: 14px;
-  word-break: break-all;
-}
-
 .fileCard {
   display: flex;
   align-items: center;
@@ -180,7 +175,7 @@
   width: 42px;
   height: 42px;
   border-radius: 8px;
-  background: #5b9bd5;
+  background: var(--c-primary);
   color: #fff;
   display: flex;
   align-items: center;
@@ -198,7 +193,7 @@
 
 .fileName {
   font-size: 14px;
-  color: #111;
+  color: var(--c-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -206,7 +201,7 @@
 
 .fileSize {
   font-size: 12px;
-  color: #999;
+  color: var(--c-text-muted);
   margin-top: 2px;
 }
 
@@ -214,24 +209,57 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 90px;
+  min-width: 110px;
+  min-height: 28px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.voiceIcon {
-  font-size: 20px;
-  color: #576b95;
+.voicePlayBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--c-primary-ink);
+  flex-shrink: 0;
 }
 
-.self .voiceIcon {
-  color: #1a5c2e;
+.voiceWaveform {
+  position: relative;
+  flex: 1;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+}
+
+.voiceWaveform i {
+  flex: 1;
+  min-width: 2px;
+  max-width: 3px;
+  border-radius: 1px;
+  background: var(--c-primary-ink);
+  opacity: 0.35;
+}
+
+.voiceCursor {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--c-primary-ink);
+  transition: left 0.1s linear;
 }
 
 .voiceDuration {
-  font-size: 15px;
-}
-
-.voiceAudio {
-  display: none;
+  font-size: 14px;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 
 .mediaBubble {
@@ -285,7 +313,7 @@
   left: -22px;
   width: 18px;
   height: 18px;
-  background: #fa5151;
+  background: var(--c-danger);
   color: #fff;
   border-radius: 50%;
   display: flex;
@@ -303,6 +331,10 @@
 .avatarClickable {
   cursor: pointer;
   flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
 }
 
 .avatarClickable:active {
@@ -331,7 +363,7 @@
 .cardAvatar {
   width: 44px;
   height: 44px;
-  border-radius: 6px;
+  border-radius: var(--c-avatar-radius, 34%);
   object-fit: cover;
   flex-shrink: 0;
   display: flex;
@@ -363,4 +395,97 @@
   color: #999;
   display: block;
   margin-top: 2px;
+}
+
+.statusSending {
+  font-size: 12px;
+  color: #999;
+  text-align: right;
+  margin-top: 2px;
+  padding-right: 4px;
+}
+
+.statusFailed {
+  font-size: 12px;
+  color: var(--c-danger);
+  text-align: right;
+  margin-top: 2px;
+  padding-right: 4px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+
+.resendBtn {
+  color: var(--c-primary-ink);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.resendBtn:active {
+  opacity: 0.7;
+}
+
+.recallNotice {
+  text-align: center;
+  font-size: 12px;
+  color: #999;
+  margin: 6px 0;
+  padding: 0 12px;
+}
+
+.quoteBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border-radius: var(--c-radius-sm);
+  background: rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.self .quoteBlock {
+  background: rgba(0, 0, 0, 0.07);
+}
+
+.quoteSender {
+  font-size: 12px;
+  color: var(--c-text-secondary);
+  font-weight: 500;
+}
+
+.quoteSummary {
+  font-size: 13px;
+  color: var(--c-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+
+/* 媒体消息的引用块：位于气泡外部（媒体气泡无内边距） */
+.quoteBlockStandalone {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border-radius: var(--c-radius-sm);
+  background: rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.mentionText {
+  color: var(--c-primary-ink);
+  cursor: pointer;
+}
+
+.mentionText:active {
+  opacity: 0.7;
 }

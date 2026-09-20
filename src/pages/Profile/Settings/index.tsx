@@ -58,6 +58,15 @@ const Settings = () => {
       </List>
 
       <List className={styles.list}>
+        <List.Item onClick={() => navigate('/profile/change-password')}>
+          {t('settings.changePassword')}
+        </List.Item>
+        <List.Item onClick={() => navigate('/profile/delete-account')} className={styles.dangerItem}>
+          {t('settings.deleteAccount')}
+        </List.Item>
+      </List>
+
+      <List className={styles.list}>
         <List.Item extra="1.0.0">
           {t('settings.version')}
         </List.Item>

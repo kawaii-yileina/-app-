@@ -2,62 +2,64 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #ededed;
+  background: var(--c-bg);
 }
 
 .navBar {
-  background: #f7f7f7;
-  --title-font-size: 17px;
+  background: var(--c-surface);
+  --title-font-size: var(--c-font-h2);
   --height: 50px;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--c-border);
 }
 
 .navBar :global(.adm-nav-bar-back-arrow) {
-  color: #111;
+  color: var(--c-ink);
 }
 
 .navBar :global(.adm-nav-bar-title) {
-  color: #111;
+  color: var(--c-ink);
   font-weight: 600;
 }
 
 .more {
   font-size: 22px;
-  color: #111;
-  letter-spacing: 2px;
+  color: var(--c-ink);
 }
 
 .menuItem {
   padding: 16px 20px;
-  font-size: 17px;
-  color: #111;
+  font-size: var(--c-font-h2);
+  color: var(--c-ink);
   text-align: center;
   cursor: pointer;
 }
 
 .menuItem:active {
-  background: #f2f2f2;
+  background: var(--c-primary-tint);
 }
 
 .dangerItem {
-  color: #fa5151;
+  color: var(--c-danger);
 }
 
 .card {
-  background: #fff;
-  padding: 30px 20px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius-xl);
+  box-shadow: var(--c-shadow-sm);
+  padding: 28px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-top: 8px;
+  margin: 14px;
 }
 
 .avatar {
   width: 72px;
   height: 72px;
-  border-radius: 50%;
-  background: #95afc0;
-  color: #fff;
+  border-radius: var(--c-avatar-radius, 34%);
+  background: #ffd9df;
+  color: #3a3335;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -67,21 +69,25 @@
 
 .nickname {
   font-size: 20px;
-  font-weight: 600;
-  color: #111;
+  font-weight: 700;
+  color: var(--c-ink);
   margin-top: 14px;
 }
 
 .signature {
-  font-size: 14px;
-  color: #999;
+  font-size: var(--c-font-sm);
+  color: var(--c-text-muted);
   margin-top: 8px;
   text-align: center;
 }
 
 .infoList {
-  background: #fff;
-  margin-top: 8px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius-xl);
+  box-shadow: var(--c-shadow-sm);
+  margin: 0 14px;
+  overflow: hidden;
 }
 
 .infoRow {
@@ -91,43 +97,44 @@
 }
 
 .infoRow + .infoRow {
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--c-divider);
 }
 
 .infoLabel {
   width: 90px;
-  font-size: 15px;
-  color: #999;
+  font-size: var(--c-font-body);
+  color: var(--c-text-muted);
 }
 
 .infoValue {
-  font-size: 15px;
-  color: #111;
+  font-size: var(--c-font-body);
+  color: var(--c-ink);
 }
 
 .actions {
-  margin-top: 40px;
-  padding: 0 16px;
+  margin-top: 36px;
+  padding: 0 14px;
 }
 
 .actionBtn {
-  height: 48px;
-  background: #07c160;
+  height: 50px;
+  background: var(--c-primary);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  font-size: 16px;
+  border-radius: var(--c-radius-xl);
+  font-size: var(--c-font-h2);
+  font-weight: 600;
   cursor: pointer;
 }
 
 .actionBtn:active {
-  opacity: 0.85;
+  opacity: 0.88;
 }
 
 .actionBtn.disabled {
-  background: #f2f2f2;
-  color: #999;
+  background: var(--c-surface-2);
+  color: var(--c-text-muted);
   cursor: default;
 }

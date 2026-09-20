@@ -1,0 +1,46 @@
+.container {
+  min-height: 100vh;
+  background: var(--c-bg);
+}
+
+.navBar {
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+  --title-font-size: var(--c-font-h2);
+}
+
+.body {
+  padding: 20px 16px;
+}
+
+.hint {
+  margin: 0 0 16px;
+  font-size: var(--c-font-sm);
+  color: var(--c-text-secondary);
+  line-height: 1.6;
+}
+
+.dangerHint {
+  color: var(--c-danger, #ff3141);
+}
+
+.field {
+  margin-bottom: 14px;
+  padding: 13px 14px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius-md);
+}
+
+.field:focus-within {
+  border-color: var(--c-primary-soft);
+  box-shadow: 0 0 0 3px var(--c-primary-tint);
+}
+
+.button {
+  margin-top: 10px;
+  height: 50px;
+  font-size: var(--c-font-h2);
+  font-weight: 600;
+  --border-radius: var(--c-radius-md);
+}
