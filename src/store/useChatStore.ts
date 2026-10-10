@@ -36,12 +36,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setConversations: (conversations) => set({ conversations }),
   setActiveConversation: (conversation) => set({ activeConversation: conversation }),
   addMessage: (key, message) =>
-    set((state) => ({
-      messages: {
-        ...state.messages,
-        [key]: [...(state.messages[key] || []), message],
-      },
-    })),
+    set((state) => {
+      const list = state.messages[key] || [];
+      // 服务端为至少一次投递：同一条消息（同 msgId）可能重复到达，按 msgId 去重，避免重复气泡
+      if (message.msgId && list.some((m) => m.msgId === message.msgId)) {
+        return state;
+      }
+      return {
+        messages: {
+          ...state.messages,
+          [key]: [...list, message],
+        },
+      };
+    }),
   setMessages: (key, messages) =>
     set((state) => ({
       messages: { ...state.messages, [key]: messages },
