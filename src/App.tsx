@@ -10,6 +10,7 @@ import { useOnlineStore } from './store/useOnlineStore';
 import { useContactStore } from './store/useContactStore';
 import { contactApi, messageApi } from './api';
 import wsService from './services/websocket';
+import { syncConversations } from './services/messageSync';
 import type { ChatMessage, Message } from './types';
 import { SystemEventType, parseSystemEventType } from './types';
 import { truncatePreview, parseReplyInfo, parseMentions } from './utils/messagePreview';
@@ -136,15 +137,21 @@ const WebSocketProvider = () => {
           if (clientMsgId) {
             // 清除超时定时器
             useChatStore.getState().clearPending(clientMsgId);
+            const targetMsgId = serverMsgId || clientMsgId;
             // 更新本地消息的 msgId 为服务端 id，状态为 sent
             const messages = useChatStore.getState().messages;
             for (const [key, list] of Object.entries(messages)) {
               const found = list.find(m => m.msgId === clientMsgId);
               if (found) {
-                useChatStore.getState().updateMessage(key, clientMsgId, {
-                  msgId: serverMsgId || clientMsgId,
-                  status: 'sent',
-                });
+                // 服务端副本可能已由增量补拉提前插入：此时丢弃本地乐观副本，避免重复气泡
+                if (targetMsgId !== clientMsgId && list.some(m => m.msgId === targetMsgId)) {
+                  useChatStore.getState().removeMessage(key, clientMsgId);
+                } else {
+                  useChatStore.getState().updateMessage(key, clientMsgId, {
+                    msgId: targetMsgId,
+                    status: 'sent',
+                  });
+                }
                 break;
               }
             }
@@ -251,8 +258,29 @@ const WebSocketProvider = () => {
       }
     });
 
+    // 连接（含重连）建立后对已加载过的会话做增量补拉，补齐离线/其他设备期间的消息，
+    // 完成后刷新会话列表（预览/未读角标）
+    const unsubscribeOpen = wsService.onOpen(() => {
+      const state = useChatStore.getState();
+      const convs = state.conversations
+        .map((c) => ({ targetId: c.targetId, chatType: c.chatType }))
+        .filter((c) => (state.syncCursors[`${c.targetId}_${c.chatType}`] || 0) > 0);
+      if (convs.length === 0) {
+        return;
+      }
+      syncConversations(convs).finally(() => {
+        messageApi
+          .getConversations()
+          .then((res) => {
+            if (res.code === 200) setConversations(res.data);
+          })
+          .catch(() => {});
+      });
+    });
+
     return () => {
       unsubscribe();
+      unsubscribeOpen();
       wsService.disconnect();
     };
   }, [token, user?.userId]);

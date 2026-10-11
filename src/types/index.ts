@@ -62,10 +62,20 @@ export interface Message {
   headers?: Record<string, string>;
   status?: 'sending' | 'sent' | 'failed';
   progress?: number;
+  /** 会话内权威序号（历史 / 增量同步返回；WS 实时消息不带，用于补拉游标与排序） */
+  seq?: number;
   /** 引用回复信息（历史消息由后端 replyTo JSON 解析而来） */
   replyTo?: ReplyInfo;
   /** @提及成员（历史消息由后端 mentions JSON 解析而来） */
   mentions?: MentionInfo[];
+}
+
+/** 会话增量同步接口返回体（GET /messages/sync） */
+export interface MessageSyncResult {
+  messages: Message[];
+  /** 本批最大 seq，作为下次 sinceSeq 游标 */
+  lastSeq: number;
+  hasMore: boolean;
 }
 
 export interface MentionInfo {

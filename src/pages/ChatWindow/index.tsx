@@ -15,9 +15,7 @@ import {
   truncatePreview,
   buildForwardPayload,
   buildReplyInfo,
-  parseReplyInfo,
-  parseMentions,
-  parseHeaders,
+  normalizeServerMessage,
   pruneMentions,
   PENDING_OUTGOING_KEY,
   PENDING_FORWARD_KEY,
@@ -27,6 +25,7 @@ import {
   type PendingOutgoing,
 } from '../../utils/messagePreview';
 import { fileToBase64 } from '../../services/aiChat';
+import { syncConversation } from '../../services/messageSync';
 import wsService from '../../services/websocket';
 import { startRecording, stopRecording, cancelRecording, isRecordingSupported, isRecordingActive } from '../../services/recorder';
 import MessageBubble from '../../components/MessageBubble';
@@ -35,19 +34,6 @@ import { MicIcon, KeyboardIcon, CopyIcon, QuoteIcon, ForwardIcon, RecallIcon, Sa
 import type { Message, ChatMessage, GroupMember, MentionInfo, EmojiSticker } from '../../types';
 import { AI_ASSISTANT } from '../../types';
 import styles from './index.module.css';
-
-/** 历史消息的 replyTo / mentions / headers 由后端以 JSON 字符串返回，统一解析为对象 */
-const normalizeHistoryMessage = (msg: Message): Message => {
-  const rawReply = msg.replyTo as unknown;
-  const rawMentions = msg.mentions as unknown;
-  const rawHeaders = msg.headers as unknown;
-  return {
-    ...msg,
-    replyTo: typeof rawReply === 'string' ? parseReplyInfo(rawReply) : msg.replyTo,
-    mentions: typeof rawMentions === 'string' ? parseMentions(rawMentions) : msg.mentions,
-    headers: typeof rawHeaders === 'string' ? parseHeaders(rawHeaders) : msg.headers,
-  };
-};
 
 /** 内置 Emoji（C1 第一批，后续可扩展分类面板） */
 const EMOJIS = [
@@ -277,7 +263,13 @@ const ChatWindow = () => {
         if (res.code === 200) {
           const data = res.data || [];
           setHasMore(data.length >= 20);
-          useChatStore.getState().setMessages(conversationKey, [...data].reverse().map(normalizeHistoryMessage));
+          useChatStore.getState().setMessages(conversationKey, [...data].reverse().map(normalizeServerMessage));
+          // 初始化增量同步游标（本页最大 seq），并补拉之后的新消息（离线 / 其他设备期间到达）
+          const maxSeq = data.reduce((m, x) => Math.max(m, Number(x.seq) || 0), 0);
+          if (maxSeq > 0) {
+            useChatStore.getState().setSyncCursor(conversationKey, maxSeq);
+          }
+          syncConversation(targetId!, chatType).catch((e) => console.warn('sync on open failed:', targetId, e));
         }
       }
     } catch (e) {
@@ -294,7 +286,7 @@ const ChatWindow = () => {
       const nextPage = page + 1;
       const res = await messageApi.getHistory(targetId, chatType, nextPage, 20);
       if (res.code === 200) {
-        const older = [...(res.data || [])].reverse().map(normalizeHistoryMessage);
+        const older = [...(res.data || [])].reverse().map(normalizeServerMessage);
         setHasMore((res.data || []).length >= 20);
         setPage(nextPage);
         if (older.length > 0) {

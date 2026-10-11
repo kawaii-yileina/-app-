@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Result, LoginResponse, User, Friend, Group, Message, Conversation, GroupMember, AiConversation, UserAiConfig, SearchUser, FriendRequestItem, EmojiSticker } from '../types';
+import type { Result, LoginResponse, User, Friend, Group, Message, MessageSyncResult, Conversation, GroupMember, AiConversation, UserAiConfig, SearchUser, FriendRequestItem, EmojiSticker } from '../types';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -141,6 +141,11 @@ export const messageApi = {
       params: { targetId, chatType, page, size },
     }),
   getConversations: () => api.get<any, Result<Conversation[]>>('/messages/conversations'),
+  /** 会话增量同步：拉取 seq > sinceSeq 的消息，用于断线重连 / 多端补拉 */
+  syncMessages: (targetId: string, chatType: number, sinceSeq = 0, limit = 200) =>
+    api.get<any, Result<MessageSyncResult>>('/messages/sync', {
+      params: { targetId, chatType, sinceSeq, limit },
+    }),
   markAsRead: (targetId: string, chatType: number) =>
     api.put<any, Result<void>>('/messages/conversations/read', { targetId, chatType }),
   recallMessage: (msgId: string) =>

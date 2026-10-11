@@ -105,6 +105,31 @@ export function parseMentions(raw?: string | null): MentionInfo[] | undefined {
   }
 }
 
+/**
+ * 规范化后端返回的消息（历史 / 增量同步）：replyTo / mentions / headers 为 JSON 字符串，统一解析为对象。
+ * 历史加载与 /messages/sync 补拉共用，避免两处逻辑不一致。
+ */
+export function normalizeServerMessage(msg: Message): Message {
+  const rawReply = msg.replyTo as unknown;
+  const rawMentions = msg.mentions as unknown;
+  const rawHeaders = msg.headers as unknown;
+  return {
+    ...msg,
+    // 后端 Long 统一序列化为字符串（避免精度丢失），seq 需转 number 供排序/游标使用
+    seq: toFiniteNumber(msg.seq),
+    replyTo: typeof rawReply === 'string' ? parseReplyInfo(rawReply) : msg.replyTo,
+    mentions: typeof rawMentions === 'string' ? parseMentions(rawMentions) : msg.mentions,
+    headers: typeof rawHeaders === 'string' ? parseHeaders(rawHeaders) : msg.headers,
+  };
+}
+
+/** 尽力把未知值转成有限数字，否则返回 undefined（避免 NaN 污染排序） */
+function toFiniteNumber(value: unknown): number | undefined {
+  if (value == null || value === '') return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 /** 仅保留正文中仍存在的 @提及（用户可能删掉了 token 文本） */
 export function pruneMentions(text: string, mentions: MentionInfo[]): MentionInfo[] {
   return mentions.filter((m) => text.includes(`@${m.nickname}`));

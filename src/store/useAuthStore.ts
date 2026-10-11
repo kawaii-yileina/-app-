@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { authApi } from '../api';
+import { useChatStore } from './useChatStore';
 import type { User } from '../types';
 
 interface AuthState {
@@ -48,6 +49,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
+    resetChatState();
     set({ token: null, user: null, isAuthenticated: false });
   },
   updateUser: (userData) =>
@@ -65,15 +67,28 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ token, user: res.data, isAuthenticated: true });
       }
     } catch (e) {
-      // token 无效：清理本地登录态，避免携带死 token 反复请求
+      // token 无效：清理本地登录态，避免携带无效 token 反复请求
       localStorage.removeItem('token');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
+      resetChatState();
       set({ token: null, user: null, isAuthenticated: false });
       console.error('Failed to restore session:', e);
     }
   },
 }));
+
+/** 清空会话态：登出/失效时调用，避免切换账号后残留消息与同步游标（游标只升不降会压制新账号补拉） */
+function resetChatState() {
+  useChatStore.setState({
+    conversations: [],
+    messages: {},
+    activeConversation: null,
+    syncCursors: {},
+    typing: {},
+    pendingTimers: new Map(),
+  });
+}
 
 /**
  * 静默续期成功后由 api 层派发，更新 store 中的 token。
