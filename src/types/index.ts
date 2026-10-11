@@ -62,7 +62,7 @@ export interface Message {
   headers?: Record<string, string>;
   status?: 'sending' | 'sent' | 'failed';
   progress?: number;
-  /** 会话内权威序号（历史 / 增量同步返回；WS 实时消息不带，用于补拉游标与排序） */
+  /** 会话内权威序号：历史/增量同步与持久化投递路径（跨节点/离线，经 headers.seq）带回；本节点直投无，由 /sync 补拉回填 */
   seq?: number;
   /** 引用回复信息（历史消息由后端 replyTo JSON 解析而来） */
   replyTo?: ReplyInfo;

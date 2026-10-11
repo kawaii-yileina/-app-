@@ -124,7 +124,7 @@ export function normalizeServerMessage(msg: Message): Message {
 }
 
 /** 尽力把未知值转成有限数字，否则返回 undefined（避免 NaN 污染排序） */
-function toFiniteNumber(value: unknown): number | undefined {
+export function toFiniteNumber(value: unknown): number | undefined {
   if (value == null || value === '') return undefined;
   const n = Number(value);
   return Number.isFinite(n) ? n : undefined;
@@ -135,12 +135,19 @@ export function pruneMentions(text: string, mentions: MentionInfo[]): MentionInf
   return mentions.filter((m) => text.includes(`@${m.nickname}`));
 }
 
-/** 从一条消息构造转发载荷（剥离仅本地使用的字段） */
+/** 服务端保留 header：转发/构造新消息时必须剔除，避免旧值（如过期 seq）污染下行 */
+const RESERVED_HEADERS = ['seq', 'ack', 'serverMsgId', 'delivered'];
+
+/** 从一条消息构造转发载荷（剥离仅本地使用的字段与服务端保留 header） */
 export function buildForwardPayload(message: Message): PendingOutgoing {
+  const headers = message.headers ? { ...message.headers } : undefined;
+  if (headers) {
+    for (const key of RESERVED_HEADERS) delete headers[key];
+  }
   return {
     msgType: message.msgType,
     content: message.content,
-    headers: message.headers ? { ...message.headers } : undefined,
+    headers,
     preview: truncatePreview(message.content, message.msgType, message.headers),
   };
 }

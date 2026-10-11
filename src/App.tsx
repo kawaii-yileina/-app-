@@ -13,7 +13,7 @@ import wsService from './services/websocket';
 import { syncConversations } from './services/messageSync';
 import type { ChatMessage, Message } from './types';
 import { SystemEventType, parseSystemEventType } from './types';
-import { truncatePreview, parseReplyInfo, parseMentions } from './utils/messagePreview';
+import { truncatePreview, parseReplyInfo, parseMentions, toFiniteNumber } from './utils/messagePreview';
 import Login from './pages/Login';
 import ResetPassword from './pages/Login/ResetPassword';
 import Main from './pages/Main';
@@ -100,6 +100,8 @@ const wsMessageToMessage = (msg: ChatMessage): Message => ({
   content: msg.content,
   createdAt: new Date().toISOString(),
   headers: msg.headers,
+  // 持久化投递路径（跨节点/离线）在 headers.seq 附带权威 seq；本节点直投无 seq，由 /sync 回填
+  seq: toFiniteNumber(msg.headers?.seq),
   replyTo: parseReplyInfo(msg.headers?.replyTo),
   mentions: parseMentions(msg.headers?.mentions),
 });
@@ -134,11 +136,12 @@ const WebSocketProvider = () => {
         if (headers.ack === 'true') {
           const clientMsgId = headers.clientMsgId || '';
           const serverMsgId = headers.serverMsgId || '';
+          const ackSeq = toFiniteNumber(headers.seq);
           if (clientMsgId) {
             // 清除超时定时器
             useChatStore.getState().clearPending(clientMsgId);
             const targetMsgId = serverMsgId || clientMsgId;
-            // 更新本地消息的 msgId 为服务端 id，状态为 sent
+            // 更新本地消息的 msgId 为服务端 id、状态为 sent，并写入 ACK 携带的权威 seq
             const messages = useChatStore.getState().messages;
             for (const [key, list] of Object.entries(messages)) {
               const found = list.find(m => m.msgId === clientMsgId);
@@ -150,6 +153,7 @@ const WebSocketProvider = () => {
                   useChatStore.getState().updateMessage(key, clientMsgId, {
                     msgId: targetMsgId,
                     status: 'sent',
+                    ...(ackSeq != null ? { seq: ackSeq } : {}),
                   });
                 }
                 break;
