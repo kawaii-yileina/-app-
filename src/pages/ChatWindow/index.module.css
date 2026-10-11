@@ -60,10 +60,36 @@
 }
 
 .headerRight {
-  width: 48px;
+  min-width: 48px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 4px;
+}
+
+.callBtn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--c-primary-ink);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.callBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.callBtn svg {
+  width: 20px;
+  height: 20px;
+}
+.callBtn:active {
+  background: var(--c-primary-tint);
 }
 
 .modelBtn {
@@ -746,7 +772,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 6px 12px;
   margin-bottom: 8px;
   border-radius: var(--c-radius-sm);
   background: var(--c-surface-2);
@@ -854,3 +880,30 @@
   font-size: 14px;
   padding: 24px 0;
 }
+
+/* 通话最小化（聊天页内联条）：位于输入栏上方，占位不遮挡消息 */
+.callBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 10px 8px;
+  padding: 6px 12px;
+  border-radius: var(--c-radius-lg, 16px);
+  background: linear-gradient(135deg, #e0708a, #5c84dd);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(40, 20, 60, 0.24);
+  animation: callBarIn 180ms ease;
+}
+@keyframes callBarIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.callBarAvatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: #fff; color: var(--c-primary-ink, #e4687e);
+  font-weight: 600; overflow: hidden; flex: 0 0 auto;
+}
+.callBarAvatar img { width: 100%; height: 100%; object-fit: cover; }
+.callBarMeta { display: flex; flex-direction: column; line-height: 1.2; flex: 1; min-width: 0; }
+.callBarName { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.callBarHint { font-size: 12px; opacity: 0.9; }
+.callBarChevron { font-size: 22px; line-height: 1; opacity: 0.9; }

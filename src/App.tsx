@@ -10,7 +10,9 @@ import { useOnlineStore } from './store/useOnlineStore';
 import { useContactStore } from './store/useContactStore';
 import { contactApi, messageApi } from './api';
 import wsService from './services/websocket';
+import callManager from './services/call';
 import { syncConversations } from './services/messageSync';
+import CallOverlay from './components/CallOverlay';
 import type { ChatMessage, Message } from './types';
 import { SystemEventType, parseSystemEventType } from './types';
 import { truncatePreview, parseReplyInfo, parseMentions, toFiniteNumber } from './utils/messagePreview';
@@ -128,6 +130,11 @@ const WebSocketProvider = () => {
     loadInitialData(setConversations, setFriends, setGroups, setOnlineUsers);
 
     const unsubscribe = wsService.onMessage((message: ChatMessage) => {
+      // 音视频通话信令（瞬时）：交由通话管理器处理，不入会话消息
+      if (message.type && message.type.startsWith('CALL_')) {
+        callManager.handleSignal(message);
+        return;
+      }
       if (message.type === 'SYSTEM') {
         const content = message.content || '';
         const headers = message.headers || {};
@@ -319,6 +326,7 @@ function App() {
       <ConfigProvider locale={zhCN}>
         <SessionRestore />
         <WebSocketProvider />
+        <CallOverlay />
         <BrowserRouter>
           <BackButtonHandler />
           <Routes>

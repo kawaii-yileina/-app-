@@ -5,6 +5,7 @@ import { SmileOutline, AddOutline, PicturesOutline, CameraOutline, VideoOutline,
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../store/useChatStore';
 import { useContactStore } from '../../store/useContactStore';
+import { useCallStore } from '../../store/useCallStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useOnlineStore } from '../../store/useOnlineStore';
 import { useAiChatStore } from '../../stores/aiChatStore';
@@ -34,6 +35,7 @@ import { MicIcon, KeyboardIcon, CopyIcon, QuoteIcon, ForwardIcon, RecallIcon, Sa
 import type { Message, ChatMessage, GroupMember, MentionInfo, EmojiSticker } from '../../types';
 import { AI_ASSISTANT } from '../../types';
 import styles from './index.module.css';
+import callManager from '../../services/call';
 
 /** 内置 Emoji（C1 第一批，后续可扩展分类面板） */
 const EMOJIS = [
@@ -60,6 +62,8 @@ const ChatWindow = () => {
   const updateConversation = useChatStore((s) => s.updateConversation);
   const friends = useContactStore((s) => s.friends);
   const groups = useContactStore((s) => s.groups);
+  const callMinimized = useCallStore((s) => s.minimized);
+  const callPeer = useCallStore((s) => s.peer);
   const onlineUsers = useOnlineStore((s) => s.onlineUsers);
 
   // AI 聊天 store
@@ -1105,6 +1109,16 @@ const ChatWindow = () => {
     menuActions.push({ key: 'delete', label: t('common.delete'), icon: <DeleteIcon />, danger: true, onClick: handleDeleteMessage });
   }
 
+  const startCall = (media: 'audio' | 'video') => {
+    const friend = friends.find((f) => String(f.userId) === String(targetId));
+    callManager.start(
+      String(targetId),
+      friend?.nickname || friend?.username || String(targetId),
+      friend?.avatar,
+      media,
+    );
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
@@ -1118,6 +1132,21 @@ const ChatWindow = () => {
           )}
         </div>
         <div className={styles.headerRight}>
+          {chatType === 0 && !isAiChat && (
+            <>
+              <button className={styles.callBtn} disabled={targetDeleted} onClick={() => startCall('audio')} title={t('call.voice')} aria-label={t('call.voice')}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 4h3l2 5-2.5 1.5a12 12 0 0 0 6 6L15 14l5 2v3a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z" />
+                </svg>
+              </button>
+              <button className={styles.callBtn} disabled={targetDeleted} onClick={() => startCall('video')} title={t('call.video')} aria-label={t('call.video')}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="6" width="12" height="12" rx="2.5" />
+                  <path d="M15 10l5-3v10l-5-3z" />
+                </svg>
+              </button>
+            </>
+          )}
           {isAiChat && (
             <span className={styles.modelBtn} onClick={handleOpenModelPicker}>
               {currentModel || t('ai.model')}
@@ -1261,6 +1290,23 @@ const ChatWindow = () => {
 
       {targetDeleted && (
         <div className={styles.deletedBanner}>{t('chat.userDeleted')}</div>
+      )}
+
+      {callMinimized && callPeer && String(targetId) === String(callPeer.id) && (
+        <div className={styles.callBar} onClick={() => useCallStore.getState().setMinimized(false)}>
+          <span className={styles.callBarAvatar}>
+            {callPeer.avatar ? (
+              <img src={callPeer.avatar} alt="" />
+            ) : (
+              (callPeer.name || '?').slice(0, 1).toUpperCase()
+            )}
+          </span>
+          <span className={styles.callBarMeta}>
+            <span className={styles.callBarName}>{callPeer.name}</span>
+            <span className={styles.callBarHint}>{t('call.tapToReturn')}</span>
+          </span>
+          <span className={styles.callBarChevron}>›</span>
+        </div>
       )}
 
       <div className={styles.inputArea} style={targetDeleted ? { display: 'none' } : undefined}>
