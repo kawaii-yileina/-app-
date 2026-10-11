@@ -111,7 +111,7 @@ class CallManager {
     if (s.callId && s.peer) {
       this.send('CALL_REJECT', s.peer.id, { callId: s.callId });
     }
-    this.end('rejected');
+    this.end('hangup');
   }
 
   /** 挂断/取消 */
@@ -187,9 +187,20 @@ class CallManager {
       case 'CALL_ICE':
         this.onRemoteIce(h.candidate || '');
         break;
-      case 'CALL_HANGUP':
-        this.end(useCallStore.getState().phase === 'active' ? 'hangup' : 'canceled');
+      case 'CALL_HANGUP': {
+        const reason = h.reason || '';
+        const st = useCallStore.getState();
+        if (reason === 'accepted_elsewhere') {
+          // 被叫其余设备：已被其他端接听 → 静默收场（不闪"已取消"浮层）
+          if (st.phase === 'connecting' || st.phase === 'active') {
+            return; // 接听设备自身忽略
+          }
+          useCallStore.getState().reset();
+          return;
+        }
+        this.end(st.phase === 'active' ? 'hangup' : 'canceled');
         break;
+      }
       case 'CALL_TIMEOUT':
         this.end('timeout');
         break;

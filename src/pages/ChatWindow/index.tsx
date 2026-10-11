@@ -762,7 +762,7 @@ const ChatWindow = () => {
   const canRecall = (msg: Message | null): boolean => {
     if (!msg || isAiChat) return false;
     if (msg.senderId !== String(user?.userId)) return false;
-    if (msg.msgType === 'RECALL') return false;
+    if (msg.msgType === 'RECALL' || msg.msgType === 'CALL') return false;
     if (msg.status === 'sending' || msg.status === 'failed') return false;
     return Date.now() - new Date(msg.createdAt).getTime() <= RECALL_TIMEOUT_MS;
   };
@@ -1093,10 +1093,11 @@ const ChatWindow = () => {
   // 长按菜单项（QQ 风格宫格，仅保留普通聊天可用的操作）
   const menuActions: { key: string; label: string; icon: ReactNode; danger?: boolean; onClick: () => void }[] = [];
   if (selectedMessage) {
-    if (selectedMessage.msgType !== 'RECALL') {
+    const isRecord = selectedMessage.msgType === 'RECALL' || selectedMessage.msgType === 'CALL';
+    if (!isRecord) {
       menuActions.push({ key: 'copy', label: t('chat.copyMessage'), icon: <CopyIcon />, onClick: handleCopyMessage });
     }
-    if (!isAiChat && selectedMessage.msgType !== 'RECALL') {
+    if (!isAiChat && !isRecord) {
       menuActions.push({ key: 'quote', label: t('chat.quote'), icon: <QuoteIcon />, onClick: handleQuoteMessage });
       menuActions.push({ key: 'forward', label: t('chat.forward'), icon: <ForwardIcon />, onClick: handleForwardMessage });
     }

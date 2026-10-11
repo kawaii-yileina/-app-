@@ -260,6 +260,11 @@ const zh = {
     noAnswer: '无人接听',
     failed: '通话失败',
     permissionDenied: '无法使用麦克风/摄像头，请检查权限',
+    recordVoice: '语音通话',
+    recordVideo: '视频通话',
+    recordMissed: '未接来电',
+    recordRejected: '已拒绝',
+    recordCanceled: '已取消',
   },
 };
 

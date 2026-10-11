@@ -20,3 +20,18 @@ export interface CallPeer {
   name: string;
   avatar?: string;
 }
+
+/** 通话信令类型（与后端白名单一致）：瞬时消息，不落库 */
+export const CALL_SIGNAL_TYPES = new Set([
+  'CALL_INVITE',
+  'CALL_RINGING',
+  'CALL_ACCEPT',
+  'CALL_REJECT',
+  'CALL_CANCEL',
+  'CALL_BUSY',
+  'CALL_OFFER',
+  'CALL_ANSWER',
+  'CALL_ICE',
+  'CALL_HANGUP',
+  'CALL_TIMEOUT',
+]);

@@ -260,6 +260,11 @@ const en = {
     noAnswer: 'No answer',
     failed: 'Call failed',
     permissionDenied: 'Cannot access microphone/camera. Check permissions.',
+    recordVoice: 'Voice call',
+    recordVideo: 'Video call',
+    recordMissed: 'Missed call',
+    recordRejected: 'declined',
+    recordCanceled: 'canceled',
   },
 };
 

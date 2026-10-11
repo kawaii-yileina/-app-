@@ -6,6 +6,7 @@ import { Toast } from 'antd-mobile';
 import { PlayIcon, PauseIcon } from '../icons';
 import { resolveFileUrl } from '../../utils/fileUrl';
 import { avatarTint } from '../../utils/avatarColor';
+import { formatCallRecordText } from '../../utils/messagePreview';
 import type { Message } from '../../types';
 import styles from './index.module.css';
 
@@ -415,6 +416,18 @@ const MessageBubble = ({ message, isSelf, senderName, senderAvatar, showSenderNa
     return (
       <div className={styles.recallNotice}>
         {isSelf ? t('chat.youRecalled') : t('chat.otherRecalled')}
+      </div>
+    );
+  }
+
+  // 通话记录：居中记录条（G2）
+  if (message.msgType === 'CALL') {
+    const media = message.headers?.media === 'video' ? 'video' : 'audio';
+    const text = formatCallRecordText(media, message.headers?.callStatus, Number(message.headers?.duration || 0), t);
+    return (
+      <div className={styles.recallNotice}>
+        <span className={styles.callRecordIcon}>{media === 'video' ? '📹' : '📞'}</span>
+        {text}
       </div>
     );
   }

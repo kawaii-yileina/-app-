@@ -14,6 +14,7 @@ import callManager from './services/call';
 import { syncConversations } from './services/messageSync';
 import CallOverlay from './components/CallOverlay';
 import type { ChatMessage, Message } from './types';
+import { CALL_SIGNAL_TYPES } from './types/call';
 import { SystemEventType, parseSystemEventType } from './types';
 import { truncatePreview, parseReplyInfo, parseMentions, toFiniteNumber } from './utils/messagePreview';
 import Login from './pages/Login';
@@ -131,7 +132,7 @@ const WebSocketProvider = () => {
 
     const unsubscribe = wsService.onMessage((message: ChatMessage) => {
       // 音视频通话信令（瞬时）：交由通话管理器处理，不入会话消息
-      if (message.type && message.type.startsWith('CALL_')) {
+      if (message.type && CALL_SIGNAL_TYPES.has(message.type)) {
         callManager.handleSignal(message);
         return;
       }

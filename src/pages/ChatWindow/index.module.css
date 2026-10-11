@@ -889,7 +889,7 @@
   margin: 0 10px 8px;
   padding: 6px 12px;
   border-radius: var(--c-radius-lg, 16px);
-  background: linear-gradient(135deg, #e0708a, #5c84dd);
+  background: linear-gradient(135deg, var(--c-primary-ink, #d95c78), #5c84dd);
   color: #fff;
   cursor: pointer;
   box-shadow: 0 6px 16px rgba(40, 20, 60, 0.24);

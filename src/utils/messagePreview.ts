@@ -10,7 +10,30 @@ import { RECALL_PREVIEW } from '../types';
 export function formatConversationPreview(content: string, t: TFunction): string {
   if (content === RECALL_PREVIEW.SELF) return t('chat.youRecalled');
   if (content === RECALL_PREVIEW.OTHER) return t('chat.otherRecalled');
+  if (content.startsWith('__CALL__:')) {
+    const [, media, status, durStr] = content.split(':');
+    return formatCallRecordText(media, status, Number(durStr) || 0, t);
+  }
   return content;
+}
+
+/** 通话记录文案（会话预览与消息气泡共用，避免重复）：media audio|video, status COMPLETED/MISSED/... */
+export function formatCallRecordText(
+  media: string | undefined,
+  status: string | undefined,
+  durationSec: number,
+  t: TFunction,
+): string {
+  const label = media === 'video' ? t('call.recordVideo') : t('call.recordVoice');
+  if (status === 'COMPLETED') {
+    const mm = Math.floor(durationSec / 60).toString().padStart(2, '0');
+    const ss = Math.floor(durationSec % 60).toString().padStart(2, '0');
+    return `${label} ${mm}:${ss}`;
+  }
+  if (status === 'MISSED') return t('call.recordMissed');
+  if (status === 'REJECTED') return `${label} ${t('call.recordRejected')}`;
+  if (status === 'CANCELED') return `${label} ${t('call.recordCanceled')}`;
+  return label;
 }
 
 /**
@@ -31,6 +54,13 @@ export function truncatePreview(
       return `[语音] ${Math.round(Number(headers?.duration) || 0)}"`;
     case 'CONTACT_CARD':
       return '[个人名片]';
+    case 'CALL': {
+      // 与后端 OutboxService.callPreview 一致：__CALL__:media:status:duration
+      const media = headers?.media || 'audio';
+      const status = headers?.callStatus || '';
+      const duration = headers?.duration || '0';
+      return `__CALL__:${media}:${status}:${duration}`;
+    }
     case 'FILE': {
       const name = headers?.originalName || '';
       const text = `[文件] ${name}`;
