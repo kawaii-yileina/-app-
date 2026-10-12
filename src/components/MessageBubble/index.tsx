@@ -7,6 +7,7 @@ import { PlayIcon, PauseIcon } from '../icons';
 import { resolveFileUrl } from '../../utils/fileUrl';
 import { avatarTint } from '../../utils/avatarColor';
 import { formatCallRecordText } from '../../utils/messagePreview';
+import { messageApi } from '../../api';
 import type { Message } from '../../types';
 import styles from './index.module.css';
 
@@ -83,13 +84,33 @@ const generateBars = (seed: string): number[] => {
  * 语音气泡（微信风格）：宽度随时长变化，点击播放/暂停，播放时声波动画 + 进度。
  * 时长优先取消息头 duration（MediaRecorder 的 WebM 常缺时长元数据）。
  */
-const VoiceBubble = ({ src, duration, seed }: { src: string; duration: number; seed: string }) => {
+const VoiceBubble = ({ src, duration, seed, msgId }: { src: string; duration: number; seed: string; msgId?: string }) => {
   const { t } = useTranslation();
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcript, setTranscript] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const bars = useMemo(() => generateBars(seed || src), [seed, src]);
+
+  const transcribe = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!msgId || transcribing) return;
+    setTranscribing(true);
+    try {
+      const res = await messageApi.transcribeVoice(msgId);
+      if (res.code === 200) {
+        setTranscript(res.data?.text ?? '');
+      } else {
+        Toast.show({ content: res.message || t('chat.voiceTranscribeFailed') });
+      }
+    } catch (err: any) {
+      Toast.show({ content: err?.response?.data?.message || t('chat.voiceTranscribeFailed') });
+    } finally {
+      setTranscribing(false);
+    }
+  };
 
   const stopRaf = () => {
     if (rafRef.current !== null) {
@@ -170,21 +191,40 @@ const VoiceBubble = ({ src, duration, seed }: { src: string; duration: number; s
   const width = Math.min(200, 96 + Math.min(Math.max(duration, 1), 60) * 1.8);
 
   return (
-    <div
-      className={styles.voiceBubble}
-      style={{ width }}
-      onClick={toggle}
-    >
-      <span className={styles.voicePlayBtn}>
-        {playing ? <PauseIcon /> : <PlayIcon />}
-      </span>
-      <span className={styles.voiceWaveform}>
-        {bars.map((h, i) => (
-          <i key={i} style={{ height: `${h}%` }} />
-        ))}
-        {playing && <span className={styles.voiceCursor} style={{ left: `${progress * 100}%` }} />}
-      </span>
-      <span className={styles.voiceDuration}>{Math.max(1, Math.round(duration))}″</span>
+    <div className={styles.voiceWrap}>
+      <div
+        className={styles.voiceBubble}
+        style={{ width }}
+        onClick={toggle}
+      >
+        <span className={styles.voicePlayBtn}>
+          {playing ? <PauseIcon /> : <PlayIcon />}
+        </span>
+        <span className={styles.voiceWaveform}>
+          {bars.map((h, i) => (
+            <i key={i} style={{ height: `${h}%` }} />
+          ))}
+          {playing && <span className={styles.voiceCursor} style={{ left: `${progress * 100}%` }} />}
+        </span>
+        <span className={styles.voiceDuration}>{Math.max(1, Math.round(duration))}″</span>
+      </div>
+      {msgId && (
+        <div className={styles.voiceTools} style={{ width }}>
+          <button
+            type="button"
+            className={styles.voiceTranscribeBtn}
+            disabled={transcribing}
+            onClick={transcribe}
+          >
+            {transcribing ? t('chat.voiceTranscribing') : t('chat.voiceToText')}
+          </button>
+          {transcript !== null && (
+            <div className={styles.voiceTranscript} aria-live="polite">
+              {transcript || t('chat.voiceTranscribeEmpty')}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -344,7 +384,19 @@ const MessageBubble = ({ message, isSelf, senderName, senderAvatar, showSenderNa
 
   const renderVoice = () => {
     const duration = Number(message.headers?.duration) || 0;
-    return <VoiceBubble src={message.content} duration={duration} seed={message.msgId || message.id || ''} />;
+    // 仅已确认发送成功（有服务端 msgId）的语音可转写；发送中/失败不显示按钮
+    const transcribeId =
+      message.msgId && message.status !== 'sending' && message.status !== 'failed'
+        ? message.msgId
+        : undefined;
+    return (
+      <VoiceBubble
+        src={message.content}
+        duration={duration}
+        seed={message.msgId || message.id || ''}
+        msgId={transcribeId}
+      />
+    );
   };
 
   const renderContent = () => {

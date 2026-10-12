@@ -150,6 +150,9 @@ export const messageApi = {
     api.put<any, Result<void>>('/messages/conversations/read', { targetId, chatType }),
   recallMessage: (msgId: string) =>
     api.post<any, Result<void>>('/messages/recall', { msgId }),
+  /** 语音转文字（本地 ASR）：按 msgId 转写，返回文本 */
+  transcribeVoice: (msgId: string) =>
+    api.post<any, Result<{ text: string }>>('/messages/voice/transcribe', { msgId }),
   deleteConversation: (targetId: string, chatType: number) =>
     api.delete<any, Result<void>>(`/messages/conversations/${targetId}/${chatType}`),
   getUnreadCounts: () => api.get<any, Result<Record<string, number>>>('/messages/unread'),

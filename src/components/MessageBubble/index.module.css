@@ -262,6 +262,47 @@
   flex-shrink: 0;
 }
 
+/* 语音转文字 */
+.voiceWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.voiceTools {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.voiceTranscribeBtn {
+  align-self: flex-start;
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-full, 9999px);
+  background: var(--c-surface-2);
+  color: var(--c-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.voiceTranscribeBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.voiceTranscript {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--c-text);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm, 8px);
+  padding: 6px 10px;
+  max-height: 160px;
+  overflow-y: auto;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
 .mediaBubble {
   padding: 0;
   background: transparent;
