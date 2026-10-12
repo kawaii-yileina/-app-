@@ -13,7 +13,7 @@ html, body, #root {
 }
 
 body {
-  background: #fdf7f7;
+  background: var(--c-bg, #f6f7f8);
   min-height: 100vh;
 }
 
@@ -23,63 +23,63 @@ body {
 }
 
 :root {
-  --primary-color: #7c3aed;
-  --primary-light: #a78bfa;
-  --primary-dark: #5b21b6;
-  --success-color: #10b981;
+  --primary-color: #e4586b;
+  --primary-light: #f0a6b1;
+  --primary-dark: #c33f55;
+  --success-color: #4cb782;
   --warning-color: #f59e0b;
-  --danger-color: #ef4444;
-  --background: #fafafa;
-  --bg-color: #f8f9fa;
+  --danger-color: #e4576b;
+  --background: #f6f7f8;
+  --bg-color: #f6f7f8;
   --card-bg: #ffffff;
-  --card-bg-active: #f5f5f5;
-  --input-bg: #f5f6f8;
-  --text-primary: #1f2937;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
-  --border-color: #e5e7eb;
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --card-bg-active: #f2f3f5;
+  --input-bg: #f2f3f5;
+  --text-primary: #24262b;
+  --text-secondary: #6a6f76;
+  --text-muted: #9ca1a8;
+  --border-color: #e9eaec;
+  --shadow-sm: 0 1px 2px 0 rgba(24, 26, 30, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(24, 26, 30, 0.08), 0 2px 4px -1px rgba(24, 26, 30, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(24, 26, 30, 0.1), 0 4px 6px -2px rgba(24, 26, 30, 0.05);
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 24px;
   --radius-full: 9999px;
 
-  /* ===== 设计语言（甜美粉 / 大面积留白 + 局部点缀） ===== */
-  /* 主色：甜美粉 */
-  --c-primary: #ff8fa3;
-  --c-primary-soft: #ffb6c1;
-  --c-primary-tint: #fff0f3;
-  --c-primary-ink: #e4687e;
-  /* 强调：天空蓝 */
-  --c-accent: #6ec6ff;
-  --c-accent-soft: #90e0ef;
-  --c-accent-tint: #eaf7ff;
-  /* 点缀：暖肤 / 沙滩 */
-  --c-warm: #ffe5d9;
-  --c-warm-deep: #fad0c4;
-  /* 状态：棕榈叶绿 */
-  --c-success: #6fcfa8;
-  --c-success-tint: #e6f7f0;
-  /* 中性：发丝黑（避免纯黑） */
-  --c-ink: #2a2a2a;
-  --c-ink-soft: #3a3335;
-  --c-text: #3a3335;
-  --c-text-secondary: #8c8085;
-  --c-text-muted: #b7adb2;
+  /* ===== 设计语言（中性克制 · 单玫红） ===== */
+  /* 品牌：玫红（唯一强调色） */
+  --c-primary: #e4586b;
+  --c-primary-soft: #f0a6b1;
+  --c-primary-tint: #fdedef;
+  --c-primary-ink: #c33f55;
+  /* 次级：石墨灰蓝（链接/少量图标/AI） */
+  --c-accent: #5c6672;
+  --c-accent-tint: #eef1f4;
+  /* 中性暖灰块（自己气泡等） */
+  --c-warm: #f2f0ed;
+  /* 状态：绿 */
+  --c-success: #4cb782;
+  --c-success-tint: #eaf6f0;
+  /* 中性：石墨黑 */
+  --c-ink: #1b1d21;
+  --c-text: #24262b;
+  --c-text-secondary: #6a6f76;
+  --c-text-muted: #9ca1a8;
   /* 面 / 底 / 线 */
-  --c-bg: #fdf7f7;
+  --c-bg: #f6f7f8;
   --c-surface: #ffffff;
-  --c-surface-2: #fff9fa;
-  --c-border: #f3e7ea;
-  --c-divider: #f7eef1;
-  --c-danger: #f2687c;
-  /* 阴影（暖调、轻） */
-  --c-shadow-sm: 0 1px 2px rgba(58, 51, 53, 0.04);
-  --c-shadow-md: 0 6px 18px rgba(58, 51, 53, 0.06);
-  --c-shadow-pink: 0 6px 16px rgba(255, 143, 163, 0.22);
+  --c-surface-2: #f2f3f5;
+  --c-border: #e9eaec;
+  --c-divider: #f0f1f3;
+  --c-danger: #e4576b;
+  /* 通话浮层（深色低饱和纯色 + 扁平圆钮，参照截图） */
+  --c-call-bg: #3a3436;
+  --c-call-surface: rgba(255, 255, 255, 0.28);
+  --c-hangup: #e4586b;
+  /* 阴影（中性、轻） */
+  --c-shadow-sm: 0 1px 2px rgba(24, 26, 30, 0.05);
+  --c-shadow-md: 0 6px 18px rgba(24, 26, 30, 0.07);
   /* 圆角 */
   --c-radius-sm: 8px;
   --c-radius-md: 12px;
@@ -94,40 +94,41 @@ body {
   --c-font-body: 15px;
   --c-font-sm: 13px;
   --c-font-xs: 11px;
+  /* antd-mobile 主色对齐品牌玫红（否则 Button 等组件回落默认蓝） */
+  --adm-color-primary: #e4586b;
 }
 
 [data-theme="dark"] {
-  --background: #111111;
-  --bg-color: #111111;
-  --card-bg: #1e1e1e;
-  --card-bg-active: #2a2a2a;
-  --input-bg: #2a2a2a;
-  --text-primary: #e5e5e5;
-  --text-secondary: #a3a3a3;
-  --text-muted: #737373;
-  --border-color: #333333;
+  --background: #141618;
+  --bg-color: #141618;
+  --card-bg: #1e2124;
+  --card-bg-active: #262a2e;
+  --input-bg: #262a2e;
+  --text-primary: #eceef0;
+  --text-secondary: #a9aeb5;
+  --text-muted: #767c84;
+  --border-color: #33383d;
 
-  /* 设计语言暗色（暖黑，避免冷灰） */
-  --c-ink: #f5edef;
-  --c-ink-soft: #e8dee1;
-  --c-text: #f0e7e9;
-  --c-text-secondary: #b6aab0;
-  --c-text-muted: #7f7378;
-  --c-bg: #1f1b1d;
-  --c-surface: #2a2427;
-  --c-surface-2: #332c2f;
-  --c-border: #3a3235;
-  --c-divider: #332b2e;
-  --c-primary-tint: #3a2a2f;
-  --c-accent-tint: #22313a;
-  --c-success-tint: #22332c;
-  /* 暖色气泡底在暗色下需加深，否则浅暖底 + 浅色文字不可读 */
-  --c-warm: #4a3a34;
-  --c-warm-deep: #5b4740;
+  /* 设计语言暗色（中性暖黑，避免冷灰） */
+  --c-ink: #f2f3f5;
+  --c-text: #eceef0;
+  --c-text-secondary: #a9aeb5;
+  --c-text-muted: #767c84;
+  --c-bg: #141618;
+  --c-surface: #1e2124;
+  --c-surface-2: #262a2e;
+  --c-border: #33383d;
+  --c-divider: #2a2f33;
+  --c-primary-tint: #3a2529;
+  --c-accent-tint: #262b31;
+  --c-success-tint: #1f2f28;
+  /* 中性气泡底在暗色下加深 */
+  --c-warm: #2a2c2f;
   --c-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
   --c-shadow-md: 0 6px 18px rgba(0, 0, 0, 0.32);
   /* 避免 antd-mobile 组件（如 SwipeAction）在暗色下露出白色底 */
-  --adm-color-background: #2a2427;
+  --adm-color-background: #1e2124;
+  --adm-color-primary: #e4586b;
 }
 
 .adm-image-viewer-image {

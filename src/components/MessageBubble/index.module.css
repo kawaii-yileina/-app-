@@ -410,7 +410,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #95afc0;
+  background: var(--c-accent);
   color: #fff;
   font-size: 18px;
   font-weight: 600;

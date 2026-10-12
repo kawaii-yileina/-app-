@@ -90,15 +90,15 @@
   width: 52px;
   height: 52px;
   border-radius: var(--c-avatar-radius, 34%);
-  background: linear-gradient(135deg, var(--c-primary-soft) 0%, var(--c-accent-soft) 100%);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--c-text-secondary);
   font-weight: 700;
   font-size: 16px;
   letter-spacing: 0.5px;
-  box-shadow: var(--c-shadow-pink);
 }
 
 .onlineDot {

@@ -17,15 +17,15 @@
   height: 76px;
   margin: 0 auto 18px;
   border-radius: 24px;
-  background: linear-gradient(135deg, var(--c-primary-soft) 0%, var(--c-accent-soft) 100%);
+  background: var(--c-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--c-surface);
   font-size: 26px;
   font-weight: 800;
   letter-spacing: 1px;
-  box-shadow: var(--c-shadow-pink);
+  box-shadow: var(--c-shadow-md);
 }
 
 .title {

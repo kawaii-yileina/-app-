@@ -176,8 +176,7 @@ export default function CallOverlay() {
 
   return (
     <div className={`${styles.overlay} ${showVideo ? styles.videoMode : ''}`}>
-      <div className={`${styles.glow} ${styles.glowA}`} />
-      <div className={`${styles.glow} ${styles.glowB}`} />
+      {!showVideo && peer.avatar && <img className={styles.callBg} src={peer.avatar} alt="" />}
       <div className={styles.scrim} />
 
       {showVideo && <video ref={remoteVideoRef} className={styles.videoRemote} autoPlay playsInline />}
@@ -199,7 +198,7 @@ export default function CallOverlay() {
 
       <div className={styles.center}>
         <div className={`${styles.avatarWrap} ${ringing ? styles.ringing : ''}`}>
-          <div className={`${styles.ring} ${ringing ? styles.ring1 : styles.ringStatic}`} />
+          <div className={styles.ring} />
           {ringing && <div className={`${styles.ring} ${styles.ring2}`} />}
           {ringing && <div className={`${styles.ring} ${styles.ring3}`} />}
           {avatarNode}
@@ -235,12 +234,12 @@ export default function CallOverlay() {
         {inCall && (
           <>
             <button className={styles.action} onClick={() => callManager.toggleMute()}>
-              <span className={`${styles.btn} ${muted ? styles.btnMuted : ''}`}>{muted ? MicOffIcon : MicIcon}</span>
+              <span className={`${styles.btn} ${muted ? '' : styles.btnOn}`}>{muted ? MicOffIcon : MicIcon}</span>
               <span className={styles.actionLabel}>{muted ? t('call.unmute') : t('call.mute')}</span>
             </button>
             {isVideo && (
               <button className={styles.action} onClick={() => callManager.toggleCamera()}>
-                <span className={`${styles.btn} ${cameraOff ? styles.btnMuted : ''}`}>
+                <span className={`${styles.btn} ${cameraOff ? '' : styles.btnOn}`}>
                   {cameraOff ? VideoOffIcon : VideoIcon}
                 </span>
                 <span className={styles.actionLabel}>{cameraOff ? t('call.cameraOn') : t('call.cameraOff')}</span>

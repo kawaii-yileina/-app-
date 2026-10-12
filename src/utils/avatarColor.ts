@@ -1,4 +1,4 @@
-const AVATAR_TINTS = ['#FFD9DF', '#D6EFFF', '#FFE5D9', '#D8F3E7', '#E9E1FF', '#FFE9F0'];
+const AVATAR_TINTS = ['#F1EEEB', '#E9EBEE', '#FBEAEC', '#E7F2EC', '#F3EFE7', '#E8EEF3'];
 
 /**
  * 按名称/ID 生成确定性柔和底色，保证同一个人在所有页面颜色一致。
