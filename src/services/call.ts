@@ -20,6 +20,7 @@ class CallManager {
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private role: 'caller' | 'callee' | null = null;
   private iceServers: RTCIceServer[] = ICE_SERVERS;
+  private iceRefreshTimer: number | null = null;
 
   private myId(): string {
     return String(useAuthStore.getState().user?.userId ?? '');
@@ -54,7 +55,7 @@ class CallManager {
     useCallStore.getState().setPeerStreams(this.localStream, this.remoteStream);
   }
 
-  /** 建连前拉取 ICE 配置（含 TURN 临时凭证）；失败则保留兜底 STUN */
+  /** 建连前拉取 ICE 配置（含 TURN 临时凭证）；失败则保留兜底 STUN。并按 TTL 定时刷新（预热后续呼叫/重连配置） */
   private async loadIceServers() {
     try {
       const res = await callApi.getIceConfig();
@@ -62,8 +63,39 @@ class CallManager {
       if (Array.isArray(servers) && servers.length > 0) {
         this.iceServers = servers;
       }
+      this.scheduleIceRefresh(Number(res?.data?.ttl));
     } catch (e) {
       console.warn('loadIceServers failed, fallback to default STUN:', e);
+    }
+  }
+
+  /** 在 TURN 凭证过期前刷新（默认提前 5 分钟，最短 30 秒），避免长通话/重连时凭证失效 */
+  private scheduleIceRefresh(ttlSeconds: number) {
+    if (this.iceRefreshTimer) {
+      clearTimeout(this.iceRefreshTimer);
+    }
+    // 通话已结束（await 期间被 end()）：不再排定时器，避免空闲态永久自续
+    const phase = useCallStore.getState().phase;
+    if (phase === 'idle' || phase === 'ended') {
+      this.iceRefreshTimer = null;
+      return;
+    }
+    const ttl = Number.isFinite(ttlSeconds) && ttlSeconds > 0 ? ttlSeconds : 3600;
+    const delayMs = Math.max(30_000, (ttl - 300) * 1000);
+    this.iceRefreshTimer = window.setTimeout(() => {
+      this.iceRefreshTimer = null;
+      const p = useCallStore.getState().phase;
+      if (p === 'idle' || p === 'ended') {
+        return;
+      }
+      void this.loadIceServers();
+    }, delayMs);
+  }
+
+  private clearIceRefresh() {
+    if (this.iceRefreshTimer) {
+      clearTimeout(this.iceRefreshTimer);
+      this.iceRefreshTimer = null;
     }
   }
 
@@ -351,6 +383,7 @@ class CallManager {
     this.remoteStream = null;
     this.pendingCandidates = [];
     this.role = null;
+    this.clearIceRefresh();
     useCallStore.getState().markEnded(reason);
   }
 }
