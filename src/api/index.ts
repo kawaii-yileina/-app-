@@ -157,6 +157,12 @@ export const messageApi = {
   isUserOnline: (userId: string) => api.get<any, Result<boolean>>(`/messages/online/${userId}`),
 };
 
+export const callApi = {
+  /** 获取 ICE 服务器配置（STUN + TURN 临时凭证），供 WebRTC 建连 */
+  getIceConfig: () =>
+    api.get<any, Result<{ iceServers: RTCIceServer[]; ttl: number }>>('/call/ice-config'),
+};
+
 export const fileApi = {
   upload: async (
     file: File,

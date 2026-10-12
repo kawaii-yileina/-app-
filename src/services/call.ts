@@ -1,11 +1,12 @@
 import type { ChatMessage } from '../types';
 import type { CallEndReason, CallMedia } from '../types/call';
 import wsService from './websocket';
+import { callApi } from '../api';
 import { useCallStore } from '../store/useCallStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useContactStore } from '../store/useContactStore';
 
-/** ICE 服务器（第一轮仅公共 STUN；TURN/coturn 在后续接入，由后端下发） */
+/** 兜底 ICE 服务器（后端 /call/ice-config 不可用时使用；TURN 由后端临时凭证下发） */
 const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 
 /**
@@ -18,6 +19,7 @@ class CallManager {
   private remoteStream: MediaStream | null = null;
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private role: 'caller' | 'callee' | null = null;
+  private iceServers: RTCIceServer[] = ICE_SERVERS;
 
   private myId(): string {
     return String(useAuthStore.getState().user?.userId ?? '');
@@ -52,6 +54,19 @@ class CallManager {
     useCallStore.getState().setPeerStreams(this.localStream, this.remoteStream);
   }
 
+  /** 建连前拉取 ICE 配置（含 TURN 临时凭证）；失败则保留兜底 STUN */
+  private async loadIceServers() {
+    try {
+      const res = await callApi.getIceConfig();
+      const servers = res?.data?.iceServers;
+      if (Array.isArray(servers) && servers.length > 0) {
+        this.iceServers = servers;
+      }
+    } catch (e) {
+      console.warn('loadIceServers failed, fallback to default STUN:', e);
+    }
+  }
+
   /** 主叫发起呼叫 */
   async start(peerId: string, name: string, avatar: string | undefined, media: CallMedia) {
     if (useCallStore.getState().phase !== 'idle') {
@@ -68,6 +83,11 @@ class CallManager {
       return;
     }
     // 异步期间用户可能已取消：复核状态，避免发出已放弃的呼叫
+    if (useCallStore.getState().phase !== 'outgoing' || this.role !== 'caller') {
+      this.localStream?.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    await this.loadIceServers();
     if (useCallStore.getState().phase !== 'outgoing' || this.role !== 'caller') {
       this.localStream?.getTracks().forEach((t) => t.stop());
       return;
@@ -100,7 +120,13 @@ class CallManager {
       this.localStream?.getTracks().forEach((t) => t.stop());
       return;
     }
-    if (!this.send('CALL_ACCEPT', st.peer.id, { callId: st.callId })) {
+    await this.loadIceServers();
+    const st2 = useCallStore.getState();
+    if (st2.phase !== 'connecting' || this.role !== 'callee' || !st2.callId || !st2.peer) {
+      this.localStream?.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    if (!this.send('CALL_ACCEPT', st2.peer.id, { callId: st2.callId })) {
       this.end('failed');
     }
   }
@@ -210,7 +236,7 @@ class CallManager {
   }
 
   private createPc() {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection({ iceServers: this.iceServers });
     this.pc = pc;
     this.remoteStream = new MediaStream();
     pc.onicecandidate = (e) => {
