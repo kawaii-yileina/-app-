@@ -189,7 +189,10 @@ export default function CallOverlay() {
         {showVideo && (
           <>
             <div className={styles.name}>{peer.name}</div>
-            <div className={styles.status}>{status}</div>
+            <div className={styles.status}>
+              {phase === 'active' && <span className={styles.statusDot} />}
+              {status}
+            </div>
           </>
         )}
       </div>
@@ -202,7 +205,10 @@ export default function CallOverlay() {
           {avatarNode}
         </div>
         <div className={styles.name}>{peer.name}</div>
-        <div className={styles.status}>{status}</div>
+        <div className={styles.status}>
+          {phase === 'active' && <span className={styles.statusDot} />}
+          {status}
+        </div>
       </div>
 
       <div className={styles.actions}>

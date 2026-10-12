@@ -423,11 +423,18 @@ const MessageBubble = ({ message, isSelf, senderName, senderAvatar, showSenderNa
   // 通话记录：居中记录条（G2）
   if (message.msgType === 'CALL') {
     const media = message.headers?.media === 'video' ? 'video' : 'audio';
-    const text = formatCallRecordText(media, message.headers?.callStatus, Number(message.headers?.duration || 0), t);
+    const status = message.headers?.callStatus || '';
+    const text = formatCallRecordText(media, status, Number(message.headers?.duration || 0), t);
+    const tone =
+      status === 'MISSED' || status === 'REJECTED' ? styles.callRecordDanger
+        : status === 'CANCELED' || status === 'FAILED' ? styles.callRecordMuted
+        : '';
     return (
-      <div className={styles.recallNotice}>
-        <span className={styles.callRecordIcon}>{media === 'video' ? '📹' : '📞'}</span>
-        {text}
+      <div className={styles.callRecord}>
+        <span className={`${styles.callRecordChip} ${tone}`}>
+          <span className={styles.callRecordIcon}>{media === 'video' ? '📹' : '📞'}</span>
+          {text}
+        </span>
       </div>
     );
   }

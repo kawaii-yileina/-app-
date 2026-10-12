@@ -491,3 +491,27 @@
 }
 
 .callRecordIcon { margin-right: 6px; }
+
+/* 通话记录：居中胶囊，按状态着色 */
+.callRecord {
+  text-align: center;
+  margin: 8px 0;
+}
+.callRecordChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: var(--radius-full, 9999px);
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--c-text-secondary);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+}
+.callRecordDanger {
+  color: var(--c-danger);
+  border-color: var(--c-danger);
+}
+.callRecordMuted {
+  color: var(--c-text-muted);
+}

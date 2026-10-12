@@ -150,10 +150,26 @@
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
+.statusDot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3ddc84;
+  margin-right: 6px;
+  vertical-align: middle;
+  box-shadow: 0 0 0 0 rgba(61, 220, 132, 0.6);
+  animation: livePulse 1.8s ease-out infinite;
+}
+@keyframes livePulse {
+  0% { box-shadow: 0 0 0 0 rgba(61, 220, 132, 0.6); }
+  70% { box-shadow: 0 0 0 7px rgba(61, 220, 132, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(61, 220, 132, 0); }
+}
 
 .actions {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: center;
   gap: 56px;
   z-index: 1;
@@ -192,7 +208,8 @@
 
 .btnAccept { background: #2fbf71; }
 .btnReject { background: #ef4452; }
-.btnHangup { background: #ef4452; }
+.btnHangup { background: #ef4452; width: 76px; height: 76px; }
+.btnHangup svg { width: 32px; height: 32px; }
 .btnMuted {
   background: #ffffff;
   color: #6b21a8;
