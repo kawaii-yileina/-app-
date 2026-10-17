@@ -102,6 +102,8 @@ export interface ChatMessage {
   group: boolean;
   content: string;
   id?: string;
+  /** 毫秒时间戳（加密 AAD 绑定，服务端下发/上行均带） */
+  timestamp?: number;
   headers?: Record<string, string>;
 }
 

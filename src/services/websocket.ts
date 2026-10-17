@@ -1,7 +1,11 @@
+import { Toast } from 'antd-mobile';
+import i18n from '../i18n';
 import type { ChatMessage } from '../types';
+import { CryptoSession, loadCryptoConfig, type WireMessage } from './cryptoSession';
 
 type MessageHandler = (message: ChatMessage) => void;
 type OpenHandler = () => void;
+type CryptoState = 'disabled' | 'handshaking' | 'ready';
 
 /** 本端设备标识：持久化于 localStorage，同一浏览器/安装稳定；作为多端在线与离线补投的设备维度 */
 function getOrCreateDeviceId(): string {
@@ -18,7 +22,7 @@ function getOrCreateDeviceId(): string {
     return id;
   } catch {
     // 隐私模式 / 存储被禁用：退化为内存级（每次会话新设备标识，无害）
-    return `web-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    return `web-${Math.random().toString(36).slice(2)}`;
   }
 }
 
@@ -36,6 +40,9 @@ function getTabId(): string {
   }
 }
 
+/** 握手前出向上限，超限丢弃（依赖 /sync 补拉） */
+const PRE_HANDSHAKE_QUEUE_LIMIT = 100;
+
 class WebSocketService {
   private ws: WebSocket | null = null;
   private handlers: MessageHandler[] = [];
@@ -49,6 +56,35 @@ class WebSocketService {
   private lastToken: string | null = null;
   private networkBound = false;
 
+  // 应用层加密
+  private crypto: CryptoSession | null = null;
+  private cryptoState: CryptoState = 'disabled';
+  private sendQueue: ChatMessage[] = [];
+  /** 出向串行链：保证加密（含计数器自增）与发送按调用顺序执行 */
+  private outboundChain: Promise<void> = Promise.resolve();
+  /** 入向串行链：保证异步解密后按到达顺序交给业务 */
+  private decryptChain: Promise<void> = Promise.resolve();
+  /** 握手帧串行链：ACK 派生密钥必须先于 CONFIRM 校验完成 */
+  private handshakeChain: Promise<void> = Promise.resolve();
+  private handshakeTimer: ReturnType<typeof setTimeout> | null = null;
+  private cryptoFailShown = false;
+  private handshakeFailures = 0;
+
+  private clearHandshakeTimer() {
+    if (this.handshakeTimer) {
+      clearTimeout(this.handshakeTimer);
+      this.handshakeTimer = null;
+    }
+  }
+
+  private cryptoFail(key: string) {
+    if (!this.cryptoFailShown) {
+      this.cryptoFailShown = true;
+      Toast.show({ content: i18n.t(key) });
+    }
+    this.ws?.close();
+  }
+
   connect(token: string) {
     this.manualClose = false;
     this.lastToken = token;
@@ -56,20 +92,39 @@ class WebSocketService {
     const base = import.meta.env.VITE_WS_URL || 'ws://localhost:9100';
     const deviceId = encodeURIComponent(`${getOrCreateDeviceId()}-${getTabId()}`);
     const wsUrl = `${base}?token=${token}&deviceId=${deviceId}&deviceType=web`;
+
+    const cryptoConfig = loadCryptoConfig();
+    if (cryptoConfig.enabled && !cryptoConfig.serverSpkiB64) {
+      console.error('crypto enabled but VITE_CRYPTO_SERVER_SPKI missing; refuse to connect');
+      if (!this.cryptoFailShown) {
+        this.cryptoFailShown = true;
+        Toast.show({ content: i18n.t('chat.cryptoHandshakeFailed') });
+      }
+      return;
+    }
+    this.cryptoFailShown = false;
+    this.crypto = cryptoConfig.enabled ? new CryptoSession(cryptoConfig) : null;
+    this.cryptoState = cryptoConfig.enabled ? 'handshaking' : 'disabled';
+    this.sendQueue = [];
+    this.outboundChain = Promise.resolve();
+    this.decryptChain = Promise.resolve();
+    this.handshakeChain = Promise.resolve();
+    this.clearHandshakeTimer();
+
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
       console.log('WebSocket connected');
       this.reconnectAttempts = 0;
-      this.startHeartbeat();
-      // 连接（含重连）建立后通知订阅方（用于触发增量补拉）
-      this.openHandlers.forEach((handler) => {
-        try {
-          handler();
-        } catch (e) {
-          console.error('WebSocket open handler error:', e);
-        }
-      });
+      if (this.cryptoState === 'handshaking' && this.crypto) {
+        this.startHandshake();
+        this.handshakeTimer = setTimeout(() => {
+          console.error('crypto handshake timeout');
+          this.cryptoFail('chat.cryptoHandshakeFailed');
+        }, 10000);
+      } else {
+        this.onReady();
+      }
     };
 
     this.ws.onmessage = (event) => {
@@ -79,14 +134,52 @@ class WebSocketService {
     this.ws.onclose = () => {
       console.log('WebSocket disconnected');
       this.stopHeartbeat();
-      if (!this.manualClose) {
-        this.tryReconnect(token);
+      this.clearHandshakeTimer();
+      if (this.manualClose) return;
+      if (this.cryptoState === 'handshaking') {
+        // 握手阶段连续断开（如服务端未开加密/配置错配）：给出提示并停止无意义重连
+        this.handshakeFailures++;
+        if (this.handshakeFailures >= 3) {
+          this.cryptoFailShown = false;
+          this.cryptoFail('chat.cryptoHandshakeFailed');
+          return;
+        }
       }
+      this.tryReconnect(token);
     };
 
     this.ws.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
+  }
+
+  private async startHandshake() {
+    try {
+      const hello = await this.crypto!.start();
+      this.rawSend({ type: 'CRYPTO_HELLO', content: hello });
+    } catch (e) {
+      console.error('crypto handshake start failed:', e);
+      this.cryptoFail((e as Error)?.message === 'CRYPTO_UNAVAILABLE'
+        ? 'chat.cryptoUnavailable'
+        : 'chat.cryptoHandshakeFailed');
+    }
+  }
+
+  /** 连接可收发业务（握手完成或未启用加密） */
+  private onReady() {
+    this.clearHandshakeTimer();
+    this.handshakeFailures = 0;
+    this.startHeartbeat();
+    this.openHandlers.forEach((handler) => {
+      try {
+        handler();
+      } catch (e) {
+        console.error('WebSocket open handler error:', e);
+      }
+    });
+    const queued = this.sendQueue;
+    this.sendQueue = [];
+    queued.forEach((m) => this.enqueueOutbound(m));
   }
 
   setUserId(userId: string) {
@@ -97,13 +190,13 @@ class WebSocketService {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN && this.userId) {
-        this.ws.send(JSON.stringify({
+        this.send({
           type: 'HEARTBEAT',
           from: this.userId,
           to: '',
           group: false,
           content: '',
-        }));
+        });
       }
     }, 30000);
   }
@@ -112,6 +205,12 @@ class WebSocketService {
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
+    }
+  }
+
+  private rawSend(message: unknown) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(message));
     }
   }
 
@@ -129,12 +228,86 @@ class WebSocketService {
   }
 
   private parseMessage(text: string) {
+    let message: ChatMessage & { content: string; headers?: Record<string, string>; timestamp?: number };
     try {
-      const message: ChatMessage = JSON.parse(text);
-      this.handlers.forEach((handler) => handler(message));
+      message = JSON.parse(text);
     } catch (e) {
       console.error('Failed to parse WebSocket message:', e);
+      return;
     }
+
+    if (this.cryptoState === 'handshaking') {
+      // 串行化：ACK 必须先完成密钥派生，CONFIRM 才能校验（两帧可能同一批次到达）
+      const session = this.crypto;
+      const ws = this.ws;
+      if (message.type === 'CRYPTO_HELLO_ACK') {
+        this.handshakeChain = this.handshakeChain.then(() => {
+          if (session !== this.crypto || ws !== this.ws) return;
+          return this.onAck(message.content);
+        });
+      } else if (message.type === 'CRYPTO_CONFIRM') {
+        this.handshakeChain = this.handshakeChain.then(() => {
+          if (session !== this.crypto || ws !== this.ws) return;
+          return this.onServerConfirm(message.content);
+        });
+      } else {
+        // 握手期收到非握手帧：fail-closed
+        console.error('unexpected frame during crypto handshake:', message.type);
+        this.cryptoFail('chat.cryptoHandshakeFailed');
+      }
+      return;
+    }
+
+    if (this.cryptoState === 'ready' && this.crypto) {
+      // 串行解密，保证按到达顺序交给业务
+      const session = this.crypto;
+      const ws = this.ws;
+      this.decryptChain = this.decryptChain.then(async () => {
+        if (session !== this.crypto || ws !== this.ws) return; // 旧连接残留任务
+        try {
+          const decrypted = await session.decrypt(message as unknown as WireMessage);
+          this.dispatch(decrypted);
+        } catch (e) {
+          console.error('crypto decrypt failed:', e);
+          this.cryptoFail('chat.cryptoFailed');
+        }
+      });
+      return;
+    }
+
+    this.dispatch(message);
+  }
+
+  private async onAck(ackContent: string) {
+    try {
+      await this.crypto!.onAck(ackContent);
+    } catch (e) {
+      console.error('crypto ACK handling failed:', e);
+      this.cryptoFail((e as Error)?.message === 'CRYPTO_UNAVAILABLE' ? 'chat.cryptoUnavailable' : 'chat.cryptoHandshakeFailed');
+    }
+  }
+
+  private async onServerConfirm(confirmContent: string) {
+    try {
+      const ok = await this.crypto!.verifyServerConfirm(confirmContent);
+      if (!ok) {
+        console.error('server CONFIRM verification failed');
+        this.cryptoFail('chat.cryptoHandshakeFailed');
+        return;
+      }
+      const clientConfirm = await this.crypto!.buildClientConfirm();
+      this.rawSend({ type: 'CRYPTO_CONFIRM', content: clientConfirm });
+      this.crypto!.markReady();
+      this.cryptoState = 'ready';
+      this.onReady();
+    } catch (e) {
+      console.error('crypto CONFIRM handling failed:', e);
+      this.cryptoFail('chat.cryptoHandshakeFailed');
+    }
+  }
+
+  private dispatch(message: ChatMessage) {
+    this.handlers.forEach((handler) => handler(message));
   }
 
   private ensureNetworkListeners() {
@@ -176,13 +349,44 @@ class WebSocketService {
     }
   }
 
+  /** 出向：串行加密后发送 */
+  private enqueueOutbound(message: ChatMessage) {
+    const session = this.crypto;
+    const ws = this.ws;
+    this.outboundChain = this.outboundChain.then(async () => {
+      if (session !== this.crypto || ws !== this.ws) return; // 旧连接残留任务
+      try {
+        const wire = await session!.encrypt(message);
+        this.rawSend(wire);
+      } catch (e) {
+        console.error('crypto encrypt/send failed:', e);
+        this.cryptoFail('chat.cryptoFailed');
+      }
+    });
+  }
+
   /** 发送消息；连接未就绪时返回 false（调用方据此提示失败，避免静默丢包） */
   send(message: ChatMessage): boolean {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
+    if (this.ws?.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    if (this.cryptoState === 'disabled') {
+      this.rawSend(message);
       return true;
     }
-    return false;
+    if (message.type === 'CRYPTO_HELLO' || message.type === 'CRYPTO_CONFIRM') {
+      this.rawSend(message);
+      return true;
+    }
+    if (this.cryptoState !== 'ready') {
+      // 握手完成前缓冲，完成后再加密发送
+      if (this.sendQueue.length < PRE_HANDSHAKE_QUEUE_LIMIT) {
+        this.sendQueue.push(message);
+      }
+      return true;
+    }
+    this.enqueueOutbound(message);
+    return true;
   }
 
   onMessage(handler: MessageHandler) {
@@ -203,11 +407,16 @@ class WebSocketService {
   disconnect() {
     this.manualClose = true;
     this.stopHeartbeat();
+    this.clearHandshakeTimer();
+    this.handshakeFailures = 0;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
     this.reconnectAttempts = this.maxReconnectAttempts;
+    this.crypto = null;
+    this.cryptoState = 'disabled';
+    this.sendQueue = [];
     if (this.ws) {
       this.ws.onclose = null;
       this.ws.close();
