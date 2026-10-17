@@ -8,6 +8,7 @@ interface CallState {
   media: CallMedia;
   muted: boolean;
   cameraOff: boolean;
+  speakerOn: boolean;
   minimized: boolean;
   /** 通话接通时间（ms） */
   startedAt: number | null;
@@ -21,6 +22,7 @@ interface CallState {
   setPeerStreams: (local: MediaStream | null, remote: MediaStream | null) => void;
   setMuted: (muted: boolean) => void;
   setCameraOff: (off: boolean) => void;
+  setSpeakerOn: (on: boolean) => void;
   setMinimized: (minimized: boolean) => void;
   markActive: () => void;
   markEnded: (reason: CallEndReason) => void;
@@ -34,6 +36,7 @@ const initial = {
   media: 'audio' as CallMedia,
   muted: false,
   cameraOff: false,
+  speakerOn: true,
   minimized: false,
   startedAt: null as number | null,
   endReason: null as CallEndReason | null,
@@ -51,6 +54,7 @@ export const useCallStore = create<CallState>((set) => ({
   setPeerStreams: (local, remote) => set({ localStream: local, remoteStream: remote }),
   setMuted: (muted) => set({ muted }),
   setCameraOff: (cameraOff) => set({ cameraOff }),
+  setSpeakerOn: (speakerOn) => set({ speakerOn }),
   setMinimized: (minimized) => set({ minimized }),
   markActive: () => set({ phase: 'active', startedAt: Date.now(), endReason: null }),
   markEnded: (reason) => set({ phase: 'ended', endReason: reason }),

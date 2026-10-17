@@ -11,6 +11,7 @@ import { useContactStore } from './store/useContactStore';
 import { contactApi, messageApi } from './api';
 import wsService from './services/websocket';
 import callManager from './services/call';
+import { useCallRingtone } from './hooks/useCallRingtone';
 import { syncConversations } from './services/messageSync';
 import CallOverlay from './components/CallOverlay';
 import type { ChatMessage, Message } from './types';
@@ -322,11 +323,17 @@ const loadInitialData = async (
   }
 };
 
+const CallRingtoneProvider = () => {
+  useCallRingtone();
+  return null;
+};
+
 function App() {
   return (
       <ConfigProvider locale={zhCN}>
         <SessionRestore />
         <WebSocketProvider />
+        <CallRingtoneProvider />
         <CallOverlay />
         <BrowserRouter>
           <BackButtonHandler />

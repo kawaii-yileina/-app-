@@ -123,7 +123,7 @@ const AddFriend = () => {
             <div className={styles.avatar} style={{ background: avatarTint(user.nickname || '') }}>{user.nickname?.charAt(0)}</div>
             <div className={styles.info}>
               <div className={styles.name}>{user.nickname}</div>
-              <div className={styles.sub}>{`${t('contacts.wechat')}: ${user.username}`}</div>
+              <div className={styles.sub}>{`${t('contacts.account')}: ${user.username}`}</div>
             </div>
             <div onClick={(e) => e.stopPropagation()}>
               {getAction(user, index)}

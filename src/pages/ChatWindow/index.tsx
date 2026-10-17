@@ -1,17 +1,18 @@
 import { useEffect, useLayoutEffect, useRef, useState, Fragment, type ReactNode } from 'react';
 import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { Input, Button, Popup, Toast, SpinLoading, ImageViewer, Picker, SearchBar, Dialog } from 'antd-mobile';
-import { SmileOutline, AddOutline, PicturesOutline, CameraOutline, VideoOutline, FolderOutline, DeleteOutline } from 'antd-mobile-icons';
+import { Smile, Plus, Image, Camera, Video, Film, Folder, Trash2, Mic, Keyboard, Copy, Quote, Forward, Undo2, Download, Phone } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../store/useChatStore';
 import { useContactStore } from '../../store/useContactStore';
-import { useCallStore } from '../../store/useCallStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useOnlineStore } from '../../store/useOnlineStore';
 import { useAiChatStore } from '../../stores/aiChatStore';
 import { messageApi, fileApi, contactApi, emojiApi } from '../../api';
+import { uploadResumable } from '../../services/upload';
 import { getModels, getSessionDetail, lockModel, type HermesModel } from '../../api/hermes';
 import { downloadFile } from '../../utils/download';
+import { resolveFileUrl } from '../../utils/fileUrl';
 import {
   truncatePreview,
   buildForwardPayload,
@@ -31,7 +32,6 @@ import wsService from '../../services/websocket';
 import { startRecording, stopRecording, cancelRecording, isRecordingSupported, isRecordingActive } from '../../services/recorder';
 import MessageBubble from '../../components/MessageBubble';
 import SharedAvatar from '../../components/SharedAvatar';
-import { MicIcon, KeyboardIcon, CopyIcon, QuoteIcon, ForwardIcon, RecallIcon, SaveIcon, DeleteIcon } from '../../components/icons';
 import type { Message, ChatMessage, GroupMember, MentionInfo, EmojiSticker } from '../../types';
 import { AI_ASSISTANT } from '../../types';
 import styles from './index.module.css';
@@ -62,8 +62,6 @@ const ChatWindow = () => {
   const updateConversation = useChatStore((s) => s.updateConversation);
   const friends = useContactStore((s) => s.friends);
   const groups = useContactStore((s) => s.groups);
-  const callMinimized = useCallStore((s) => s.minimized);
-  const callPeer = useCallStore((s) => s.peer);
   const onlineUsers = useOnlineStore((s) => s.onlineUsers);
 
   // AI 聊天 store
@@ -88,6 +86,8 @@ const ChatWindow = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [imageViewerSrc, setImageViewerSrc] = useState('');
+  const [imageViewerRaw, setImageViewerRaw] = useState('');
+  const [imageViewerName, setImageViewerName] = useState('');
   const [contextMenuVisible, setContextMenuVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   /** 长按消息时记录的锚点矩形，用于把菜单浮动定位到气泡附近 */
@@ -525,7 +525,7 @@ const ChatWindow = () => {
       );
 
       try {
-        const result = await fileApi.upload(file, (percent) => {
+        const result = await uploadResumable(file, (percent) => {
           useChatStore.getState().updateMessage(conversationKey, clientMsgId, { progress: percent });
         });
         useChatStore.getState().updateMessage(conversationKey, clientMsgId, {
@@ -555,7 +555,7 @@ const ChatWindow = () => {
       } catch (e) {
         console.error('Failed to upload/send media:', e);
         useChatStore.getState().updateMessage(conversationKey, clientMsgId, { status: 'failed' });
-        Toast.show({ content: t('chat.sendFailed') });
+        Toast.show({ content: (e as Error)?.message === 'FILE_TOO_LARGE' ? t('chat.fileTooLarge') : t('chat.sendFailed') });
       }
     }
 
@@ -807,7 +807,7 @@ const ChatWindow = () => {
     setContextMenuVisible(false);
   };
 
-  /** 引用：在输入区展示引用条；群聊中同时 @ 被引用消息的发送者（微信式回复） */
+  /** 引用：在输入区展示引用条；群聊中同时 @ 被引用消息的发送者（引用回复） */
   const handleQuoteMessage = () => {
     if (!selectedMessage) return;
     setQuotingMessage(selectedMessage);
@@ -1095,19 +1095,19 @@ const ChatWindow = () => {
   if (selectedMessage) {
     const isRecord = selectedMessage.msgType === 'RECALL' || selectedMessage.msgType === 'CALL';
     if (!isRecord) {
-      menuActions.push({ key: 'copy', label: t('chat.copyMessage'), icon: <CopyIcon />, onClick: handleCopyMessage });
+      menuActions.push({ key: 'copy', label: t('chat.copyMessage'), icon: <Copy size={18} strokeWidth={1.8} />, onClick: handleCopyMessage });
     }
     if (!isAiChat && !isRecord) {
-      menuActions.push({ key: 'quote', label: t('chat.quote'), icon: <QuoteIcon />, onClick: handleQuoteMessage });
-      menuActions.push({ key: 'forward', label: t('chat.forward'), icon: <ForwardIcon />, onClick: handleForwardMessage });
+      menuActions.push({ key: 'quote', label: t('chat.quote'), icon: <Quote size={18} strokeWidth={1.8} />, onClick: handleQuoteMessage });
+      menuActions.push({ key: 'forward', label: t('chat.forward'), icon: <Forward size={18} strokeWidth={1.8} />, onClick: handleForwardMessage });
     }
     if (canRecall(selectedMessage)) {
-      menuActions.push({ key: 'recall', label: t('chat.recall'), icon: <RecallIcon />, onClick: handleRecallMessage });
+      menuActions.push({ key: 'recall', label: t('chat.recall'), icon: <Undo2 size={18} strokeWidth={1.8} />, onClick: handleRecallMessage });
     }
     if (!isAiChat && ['IMAGE', 'VIDEO', 'FILE'].includes(selectedMessage.msgType)) {
-      menuActions.push({ key: 'save', label: t('chat.saveMedia'), icon: <SaveIcon />, onClick: handleSaveMessage });
+      menuActions.push({ key: 'save', label: t('chat.saveMedia'), icon: <Download size={18} strokeWidth={1.8} />, onClick: handleSaveMessage });
     }
-    menuActions.push({ key: 'delete', label: t('common.delete'), icon: <DeleteIcon />, danger: true, onClick: handleDeleteMessage });
+    menuActions.push({ key: 'delete', label: t('common.delete'), icon: <Trash2 size={18} strokeWidth={1.8} />, danger: true, onClick: handleDeleteMessage });
   }
 
   const startCall = (media: 'audio' | 'video') => {
@@ -1133,21 +1133,6 @@ const ChatWindow = () => {
           )}
         </div>
         <div className={styles.headerRight}>
-          {chatType === 0 && !isAiChat && (
-            <>
-              <button className={styles.callBtn} disabled={targetDeleted} onClick={() => startCall('audio')} title={t('call.voice')} aria-label={t('call.voice')}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 4h3l2 5-2.5 1.5a12 12 0 0 0 6 6L15 14l5 2v3a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z" />
-                </svg>
-              </button>
-              <button className={styles.callBtn} disabled={targetDeleted} onClick={() => startCall('video')} title={t('call.video')} aria-label={t('call.video')}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="6" width="12" height="12" rx="2.5" />
-                  <path d="M15 10l5-3v10l-5-3z" />
-                </svg>
-              </button>
-            </>
-          )}
           {isAiChat && (
             <span className={styles.modelBtn} onClick={handleOpenModelPicker}>
               {currentModel || t('ai.model')}
@@ -1197,6 +1182,8 @@ const ChatWindow = () => {
           const prev = conversationMessages[index - 1];
           const gap = prev ? new Date(msg.createdAt).getTime() - new Date(prev.createdAt).getTime() : Infinity;
           const showTime = gap > 5 * 60 * 1000;
+          // 通话记录的展示主体是发起人（主叫实时副本 from=对方，故按 headers.caller 取）
+          const ownerId = msg.msgType === 'CALL' ? String(msg.headers?.caller || msg.senderId) : msg.senderId;
           return (
             <Fragment key={msg.msgId || msg.id}>
               {showTime && (
@@ -1206,15 +1193,16 @@ const ChatWindow = () => {
               )}
               <MessageBubble
                 message={msg}
-                isSelf={msg.senderId === user?.userId}
-                senderName={getSenderNameFor(msg.senderId)}
-                senderAvatar={getSenderAvatar(msg.senderId)}
+                isSelf={ownerId === user?.userId}
+                senderName={getSenderNameFor(ownerId)}
+                senderAvatar={getSenderAvatar(ownerId)}
                 showSenderName={chatType === 1}
-                onAvatarClick={msg.senderId !== String(AI_ASSISTANT.ID) && msg.senderId !== user?.userId
-                  ? () => navigate(`/contacts/${msg.senderId}`)
+                onCallRecord={msg.msgType === 'CALL' ? (media) => startCall(media) : undefined}
+                onAvatarClick={ownerId !== String(AI_ASSISTANT.ID) && ownerId !== user?.userId
+                  ? () => navigate(`/contacts/${ownerId}`)
                   : undefined}
-                onAvatarLongPress={chatType === 1 && !isAiChat && msg.senderId !== String(user?.userId)
-                  ? () => insertMention({ userId: msg.senderId, nickname: getSenderNameFor(msg.senderId) })
+                onAvatarLongPress={chatType === 1 && !isAiChat && ownerId !== String(user?.userId)
+                  ? () => insertMention({ userId: ownerId, nickname: getSenderNameFor(ownerId) })
                   : undefined}
                 onMentionClick={(mentionUserId) => {
                   if (mentionUserId && mentionUserId !== MENTION_ALL) {
@@ -1223,6 +1211,8 @@ const ChatWindow = () => {
                 }}
                 onImageClick={(src) => {
                   setImageViewerSrc(src);
+                  setImageViewerRaw(msg.content);
+                  setImageViewerName(msg.headers?.originalName || msg.content.split('/').pop()?.split('?')[0] || '');
                   setImageViewerVisible(true);
                 }}
                 onLongPress={() => handleLongPress(msg)}
@@ -1293,23 +1283,6 @@ const ChatWindow = () => {
         <div className={styles.deletedBanner}>{t('chat.userDeleted')}</div>
       )}
 
-      {callMinimized && callPeer && String(targetId) === String(callPeer.id) && (
-        <div className={styles.callBar} onClick={() => useCallStore.getState().setMinimized(false)}>
-          <span className={styles.callBarAvatar}>
-            {callPeer.avatar ? (
-              <img src={callPeer.avatar} alt="" />
-            ) : (
-              (callPeer.name || '?').slice(0, 1).toUpperCase()
-            )}
-          </span>
-          <span className={styles.callBarMeta}>
-            <span className={styles.callBarName}>{callPeer.name}</span>
-            <span className={styles.callBarHint}>{t('call.tapToReturn')}</span>
-          </span>
-          <span className={styles.callBarChevron}>›</span>
-        </div>
-      )}
-
       <div className={styles.inputArea} style={targetDeleted ? { display: 'none' } : undefined}>
         {quotingMessage && (
           <div className={styles.quoteBar}>
@@ -1331,7 +1304,7 @@ const ChatWindow = () => {
               setShowActions(false);
             }}
           >
-            {inputMode === 'voice' ? <KeyboardIcon /> : <MicIcon />}
+            {inputMode === 'voice' ? <Keyboard size={20} strokeWidth={1.8} /> : <Mic size={20} strokeWidth={1.8} />}
           </div>
 
           {inputMode === 'voice' ? (
@@ -1360,14 +1333,14 @@ const ChatWindow = () => {
             className={`${styles.iconBtn} ${showEmoji ? styles.iconBtnActive : ''}`}
             onClick={() => { setShowEmoji((v) => !v); setShowActions(false); }}
           >
-            <SmileOutline />
+            <Smile size={20} strokeWidth={1.8} />
           </div>
 
           <div
             className={`${styles.iconBtn} ${showActions ? styles.iconBtnActive : ''}`}
             onClick={() => { setShowActions((v) => !v); setShowEmoji(false); }}
           >
-            <AddOutline />
+            <Plus size={20} strokeWidth={1.8} />
           </div>
         </div>
 
@@ -1385,21 +1358,33 @@ const ChatWindow = () => {
           <div className={styles.actionPanel}>
             <div className={styles.actionGrid}>
               <div className={styles.actionItem} onClick={() => albumInputRef.current?.click()}>
-                <div className={`${styles.actionIcon} ${styles.actionAlbum}`}><PicturesOutline /></div>
+                <div className={`${styles.actionIcon} ${styles.actionAlbum}`}><Image size={26} strokeWidth={1.8} /></div>
                 <span>{t('chat.album')}</span>
               </div>
               <div className={styles.actionItem} onClick={() => cameraInputRef.current?.click()}>
-                <div className={`${styles.actionIcon} ${styles.actionCamera}`}><CameraOutline /></div>
+                <div className={`${styles.actionIcon} ${styles.actionCamera}`}><Camera size={26} strokeWidth={1.8} /></div>
                 <span>{t('chat.camera')}</span>
               </div>
               <div className={styles.actionItem} onClick={() => videoInputRef.current?.click()}>
-                <div className={`${styles.actionIcon} ${styles.actionVideo}`}><VideoOutline /></div>
+                <div className={`${styles.actionIcon} ${styles.actionVideo}`}><Film size={26} strokeWidth={1.8} /></div>
                 <span>{t('chat.video')}</span>
               </div>
               <div className={styles.actionItem} onClick={() => docInputRef.current?.click()}>
-                <div className={`${styles.actionIcon} ${styles.actionFile}`}><FolderOutline /></div>
+                <div className={`${styles.actionIcon} ${styles.actionFile}`}><Folder size={26} strokeWidth={1.8} /></div>
                 <span>{t('chat.file')}</span>
               </div>
+              {chatType === 0 && !isAiChat && (
+                <>
+                  <div className={styles.actionItem} onClick={() => { if (!targetDeleted) { setShowActions(false); startCall('audio'); } }}>
+                    <div className={`${styles.actionIcon} ${styles.actionCallVoice}`}><Phone size={26} strokeWidth={1.8} /></div>
+                    <span>{t('call.voice')}</span>
+                  </div>
+                  <div className={styles.actionItem} onClick={() => { if (!targetDeleted) { setShowActions(false); startCall('video'); } }}>
+                    <div className={`${styles.actionIcon} ${styles.actionCallVideo}`}><Video size={26} strokeWidth={1.8} /></div>
+                    <span>{t('call.video')}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -1446,13 +1431,13 @@ const ChatWindow = () => {
                     className={styles.stickerAdd}
                     onClick={() => stickerInputRef.current?.click()}
                   >
-                    <AddOutline />
+                    <Plus size={20} strokeWidth={1.8} />
                     <span>{t('chat.stickerAdd')}</span>
                   </button>
                   {stickers.map((sticker) => (
                     <div key={sticker.id} className={styles.stickerItem}>
                       <img
-                        src={sticker.url}
+                        src={resolveFileUrl(sticker.url)}
                         alt=""
                         className={styles.stickerImg}
                         onClick={() => sendSticker(sticker)}
@@ -1462,7 +1447,7 @@ const ChatWindow = () => {
                         className={styles.stickerDelete}
                         onClick={() => handleStickerDelete(sticker)}
                       >
-                        <DeleteOutline />
+                        <Trash2 size={16} strokeWidth={1.8} />
                       </button>
                     </div>
                   ))}
@@ -1514,7 +1499,7 @@ const ChatWindow = () => {
         onClose={() => setImageViewerVisible(false)}
       />
       {imageViewerVisible && (
-        <div className={styles.downloadBtn} onClick={() => downloadFile(imageViewerSrc)}>
+        <div className={styles.downloadBtn} onClick={() => downloadFile(imageViewerRaw || imageViewerSrc, imageViewerName || undefined)}>
           {t('chat.saveMedia')}
         </div>
       )}

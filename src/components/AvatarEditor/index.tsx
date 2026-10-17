@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import Cropper from 'react-easy-crop';
 import { Popup, Button, Toast } from 'antd-mobile';
+import { Camera, Image as ImageIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Area } from 'react-easy-crop';
 import styles from './index.module.css';
@@ -112,7 +113,7 @@ const AvatarEditor = ({ visible, onClose, onUpload }: Props) => {
               style={{ display: 'none' }}
               onChange={handleFileSelect}
             />
-            <span className={styles.sourceIcon}> </span>
+            <span className={styles.sourceIcon}><Camera size={22} strokeWidth={1.8} /></span>
             <span>{t('profile.takePhoto')}</span>
           </label>
           <label className={styles.sourceBtn}>
@@ -122,7 +123,7 @@ const AvatarEditor = ({ visible, onClose, onUpload }: Props) => {
               style={{ display: 'none' }}
               onChange={handleFileSelect}
             />
-            <span className={styles.sourceIcon}> </span>
+            <span className={styles.sourceIcon}><ImageIcon size={22} strokeWidth={1.8} /></span>
             <span>{t('profile.fromGallery')}</span>
           </label>
           <Button block className={styles.cancelBtn} onClick={handleClose}>

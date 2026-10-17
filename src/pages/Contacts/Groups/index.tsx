@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { NavBar, Toast, Dialog, Input } from 'antd-mobile';
-import { AddOutline } from 'antd-mobile-icons';
+import { NavBar, Toast, Dialog, Input, PullToRefresh } from 'antd-mobile';
+import { Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { contactApi } from '../../../api';
+import { refreshGroups } from '../../../services/refresh';
+import { usePullRefresh } from '../../../hooks/usePullRefresh';
 import { useContactStore } from '../../../store/useContactStore';
 import { avatarTint } from '../../../utils/avatarColor';
 import type { Group } from '../../../types';
@@ -38,6 +40,8 @@ const Groups = () => {
     }
   };
 
+  const pullProps = usePullRefresh(refreshGroups);
+
   const handleGroupClick = (group: Group) => {
     navigate(`/chat/${group.id}?type=1`);
   };
@@ -49,11 +53,12 @@ const Groups = () => {
       </NavBar>
 
       <div className={styles.createRow} onClick={() => setShowCreateDialog(true)}>
-        <div className={styles.createIcon}><AddOutline /></div>
+        <div className={styles.createIcon}><Plus size={20} strokeWidth={1.8} /></div>
         <span className={styles.createText}>{t('contacts.createGroup')}</span>
       </div>
 
       <div className={styles.list}>
+        <PullToRefresh {...pullProps}>
         {groups.length === 0 ? (
           <div className={styles.empty}>{t('contacts.noGroups')}</div>
         ) : (
@@ -66,6 +71,7 @@ const Groups = () => {
             </div>
           ))
         )}
+        </PullToRefresh>
       </div>
 
       <Dialog

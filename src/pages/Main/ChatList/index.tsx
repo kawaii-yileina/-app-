@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SearchBar, Badge, Toast, Button, SwipeAction, Popup, Picker } from 'antd-mobile';
+import { SearchBar, Badge, Toast, Button, SwipeAction, Popup, Picker, PullToRefresh } from 'antd-mobile';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../../store/useChatStore';
 import { useContactStore } from '../../../store/useContactStore';
@@ -12,6 +12,8 @@ import { createSession, getModels, type HermesModel } from '../../../api/hermes'
 import { resolveFileUrl } from '../../../utils/fileUrl';
 import type { Conversation } from '../../../types';
 import { avatarTint } from '../../../utils/avatarColor';
+import { refreshAll } from '../../../services/refresh';
+import { usePullRefresh } from '../../../hooks/usePullRefresh';
 import styles from './index.module.css';
 
 const ChatList = () => {
@@ -45,6 +47,8 @@ const ChatList = () => {
       console.error('Failed to load AI sessions:', e);
     }
   };
+
+  const pullProps = usePullRefresh(refreshAll);
 
   const getTargetInfo = (targetId: string, chatType: number) => {
     if (targetId === String(AI_ASSISTANT.ID)) {
@@ -151,6 +155,7 @@ const ChatList = () => {
       </div>
 
       <div className={styles.list}>
+        <PullToRefresh {...pullProps}>
         {/* AI Sessions Section */}
         <div className={styles.sectionHeader}>
           <span className={styles.sectionTitle}>{t('chat.aiTitle')}</span>
@@ -271,6 +276,7 @@ const ChatList = () => {
             </SwipeAction>
           );
         })}
+        </PullToRefresh>
       </div>
 
       {/* 新建 AI 会话弹窗 */}

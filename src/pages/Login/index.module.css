@@ -121,20 +121,54 @@
   box-shadow: var(--c-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.06));
 }
 
-.codeRow {
+/* 邮箱 + 获取验证码：同一字段行，右侧内联文字按钮（参考图样式） */
+.fieldRow {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 14px;
+  padding: 0 14px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius-md);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.codeInput {
+.fieldRow:focus-within {
+  border-color: var(--c-primary-soft);
+  box-shadow: 0 0 0 3px var(--c-primary-tint);
+}
+
+.fieldRowInput {
   flex: 1;
-  margin-bottom: 0;
+  min-width: 0;
+  padding: 13px 0;
+  background: transparent;
+  border: none;
+}
+
+.fieldDivider {
+  flex-shrink: 0;
+  width: 1px;
+  height: 18px;
+  background: var(--c-border);
 }
 
 .codeBtn {
   flex-shrink: 0;
-  min-width: 92px;
-  --border-radius: var(--c-radius-md);
+  border: none;
+  background: none;
+  padding: 6px 0;
+  color: var(--c-primary);
+  font-size: var(--c-font-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.codeBtn:disabled,
+.codeBtnOff {
+  color: var(--c-text-muted);
+  font-weight: 500;
+  cursor: default;
 }

@@ -73,33 +73,31 @@ const ResetPassword = () => {
       </div>
 
       <div className={styles.form}>
+        <div className={styles.fieldRow}>
+          <Input
+            placeholder={t('auth.emailPlaceholder')}
+            type="email"
+            value={email}
+            onChange={setEmail}
+            className={styles.fieldRowInput}
+          />
+          <span className={styles.fieldDivider} />
+          <button
+            type="button"
+            className={`${styles.codeBtn} ${countdown > 0 || sendLoading ? styles.codeBtnOff : ''}`}
+            disabled={countdown > 0 || sendLoading}
+            onClick={handleSendCode}
+          >
+            {sendLoading ? '···' : countdown > 0 ? `${countdown}s` : t('auth.sendCode')}
+          </button>
+        </div>
+
         <Input
-          placeholder={t('auth.emailPlaceholder')}
-          type="email"
-          value={email}
-          onChange={setEmail}
+          placeholder={t('auth.codePlaceholder')}
+          value={code}
+          onChange={setCode}
           className={styles.input}
         />
-
-        <div className={styles.codeRow}>
-          <Input
-            placeholder={t('auth.codePlaceholder')}
-            value={code}
-            onChange={setCode}
-            className={`${styles.input} ${styles.codeInput}`}
-          />
-          <Button
-            size="small"
-            fill="outline"
-            color="primary"
-            disabled={countdown > 0}
-            loading={sendLoading}
-            onClick={handleSendCode}
-            className={styles.codeBtn}
-          >
-            {countdown > 0 ? `${countdown}s` : t('auth.sendCode')}
-          </Button>
-        </div>
 
         <Input
           placeholder={t('auth.newPasswordPlaceholder')}

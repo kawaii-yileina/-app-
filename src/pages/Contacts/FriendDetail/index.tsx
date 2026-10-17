@@ -158,7 +158,7 @@ const FriendDetail = () => {
 
           <div className={styles.infoList}>
             <div className={styles.infoRow}>
-              <span className={styles.infoLabel}>{t('contacts.wechat')}</span>
+              <span className={styles.infoLabel}>{t('contacts.account')}</span>
               <span className={styles.infoValue}>{user.username}</span>
             </div>
           </div>

@@ -1,12 +1,13 @@
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FileOutline } from 'antd-mobile-icons';
+import { File, Video, Phone, Play, Pause } from 'lucide-react';
 import { Toast } from 'antd-mobile';
-import { PlayIcon, PauseIcon } from '../icons';
-import { resolveFileUrl } from '../../utils/fileUrl';
+import { resolveFileUrl, isInlineMediaSrc } from '../../utils/fileUrl';
+import { useMediaUrl } from '../../hooks/useMediaUrl';
+import { getCachedObjectUrl } from '../../services/mediaCache';
+import { downloadFile } from '../../utils/download';
 import { avatarTint } from '../../utils/avatarColor';
-import { formatCallRecordText } from '../../utils/messagePreview';
 import { messageApi } from '../../api';
 import type { Message } from '../../types';
 import styles from './index.module.css';
@@ -29,6 +30,8 @@ interface Props {
   onQuoteClick?: () => void;
   /** 点击正文中被 @ 的成员 */
   onMentionClick?: (userId: string) => void;
+  /** 点击通话记录气泡重拨 */
+  onCallRecord?: (media: 'audio' | 'video') => void;
 }
 
 interface ContactCardData {
@@ -37,24 +40,81 @@ interface ContactCardData {
   avatar: string;
 }
 
-/** 图片消息：加载失败时显示占位，避免被误认为发送失败 */
-const MediaImage = ({ src, alt, onClick }: { src: string; alt: string; onClick?: () => void }) => {
+/** 图片消息：优先本地缓存（object URL），加载失败时显示占位，避免被误认为发送失败 */
+const MediaImage = ({ rawSrc, alt, onClick }: { rawSrc: string; alt: string; onClick?: (src: string) => void }) => {
   const [failed, setFailed] = useState(false);
+  const { url, reload } = useMediaUrl(rawSrc, isInlineMediaSrc(rawSrc));
   if (failed) {
     return (
-      <div className={styles.imageFailed} onClick={onClick}>
+      <div
+        className={styles.imageFailed}
+        onClick={() => {
+          setFailed(false);
+          reload();
+        }}
+      >
         {alt}
       </div>
     );
   }
+  if (!url) {
+    return <div className={styles.imageLoading} />;
+  }
   return (
     <img
-      src={src}
+      src={url}
       alt={alt}
       className={styles.image}
-      onClick={onClick}
+      onClick={() => onClick?.(url)}
       onError={() => setFailed(true)}
     />
+  );
+};
+
+/** 视频消息：点击播放时再按需下载并缓存，避免自动加载整段视频占用带宽 */
+const MediaVideo = ({ rawSrc }: { rawSrc: string }) => {
+  const [url, setUrl] = useState<string | undefined>(undefined);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const pendingPlay = useRef(false);
+
+  useEffect(() => {
+    if (url && pendingPlay.current && videoRef.current) {
+      pendingPlay.current = false;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [url]);
+
+  const startPlay = async () => {
+    if (url) {
+      videoRef.current?.play().catch(() => {});
+      return;
+    }
+    pendingPlay.current = true;
+    try {
+      setUrl(await getCachedObjectUrl(rawSrc));
+    } catch {
+      setUrl(resolveFileUrl(rawSrc));
+    }
+  };
+
+  return (
+    <>
+      {url ? (
+        <video
+          ref={videoRef}
+          src={url}
+          controls
+          className={styles.video}
+          onPlay={(e) => e.currentTarget.parentElement?.classList.add(styles.videoPlaying)}
+          onPause={(e) => e.currentTarget.parentElement?.classList.remove(styles.videoPlaying)}
+        />
+      ) : (
+        <div className={styles.videoPlaceholder} onClick={startPlay} />
+      )}
+      <div className={styles.videoOverlay}>
+        <div className={styles.playBtn}>▶</div>
+      </div>
+    </>
   );
 };
 
@@ -81,7 +141,7 @@ const generateBars = (seed: string): number[] => {
 };
 
 /**
- * 语音气泡（微信风格）：宽度随时长变化，点击播放/暂停，播放时声波动画 + 进度。
+ * 语音气泡（主流 IM 风格）：宽度随时长变化，点击播放/暂停，播放时声波动画 + 进度。
  * 时长优先取消息头 duration（MediaRecorder 的 WebM 常缺时长元数据）。
  */
 const VoiceBubble = ({ src, duration, seed, msgId }: { src: string; duration: number; seed: string; msgId?: string }) => {
@@ -141,9 +201,15 @@ const VoiceBubble = ({ src, duration, seed, msgId }: { src: string; duration: nu
     }
   };
 
-  const getAudio = (): HTMLAudioElement => {
+  const getAudio = async (): Promise<HTMLAudioElement> => {
     if (audioRef.current) return audioRef.current;
-    const audio = new Audio(resolveFileUrl(src));
+    let resolved = resolveFileUrl(src);
+    try {
+      resolved = await getCachedObjectUrl(src);
+    } catch {
+      /* 缓存不可用则用网络地址 */
+    }
+    const audio = new Audio(resolved);
     audio.preload = 'auto';
     audio.onplay = () => {
       setPlaying(true);
@@ -171,7 +237,7 @@ const VoiceBubble = ({ src, duration, seed, msgId }: { src: string; duration: nu
   };
 
   const toggle = async () => {
-    const audio = getAudio();
+    const audio = await getAudio();
     if (!audio.paused) {
       audio.pause();
       return;
@@ -198,7 +264,7 @@ const VoiceBubble = ({ src, duration, seed, msgId }: { src: string; duration: nu
         onClick={toggle}
       >
         <span className={styles.voicePlayBtn}>
-          {playing ? <PauseIcon /> : <PlayIcon />}
+          {playing ? <Pause size={16} strokeWidth={2} /> : <Play size={16} strokeWidth={2} />}
         </span>
         <span className={styles.voiceWaveform}>
           {bars.map((h, i) => (
@@ -301,7 +367,7 @@ const formatSize = (sizeStr?: string) => {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const MessageBubble = ({ message, isSelf, senderName, senderAvatar, showSenderName, onAvatarClick, onAvatarLongPress, onImageClick, onLongPress, onResend, replySenderName, onQuoteClick, onMentionClick }: Props) => {
+const MessageBubble = ({ message, isSelf, senderName, senderAvatar, showSenderName, onAvatarClick, onAvatarLongPress, onImageClick, onLongPress, onResend, replySenderName, onQuoteClick, onMentionClick, onCallRecord }: Props) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
@@ -370,15 +436,15 @@ const MessageBubble = ({ message, isSelf, senderName, senderAvatar, showSenderNa
     const name = message.headers?.originalName || message.content.split('/').pop() || t('chat.file');
     const size = formatSize(message.headers?.size);
     return (
-      <a href={resolveFileUrl(message.content)} target="_blank" rel="noreferrer" className={styles.fileCard}>
+      <div className={styles.fileCard} onClick={() => downloadFile(message.content, name)}>
         <div className={styles.fileIcon}>
-          <FileOutline />
+          <File size={20} strokeWidth={1.8} />
         </div>
         <div className={styles.fileInfo}>
           <span className={styles.fileName}>{name}</span>
           <span className={styles.fileSize}>{size || t('chat.file')}</span>
         </div>
-      </a>
+      </div>
     );
   };
 
@@ -399,20 +465,74 @@ const MessageBubble = ({ message, isSelf, senderName, senderAvatar, showSenderNa
     );
   };
 
+  const renderCallBubble = () => {
+    const media: 'audio' | 'video' = message.headers?.media === 'video' ? 'video' : 'audio';
+    const status = message.headers?.callStatus || '';
+    const durationSec = Number(message.headers?.duration || 0);
+    const mediaLabel = media === 'video' ? t('call.recordVideo') : t('call.recordVoice');
+    let text: string;
+    let danger = false;
+    if (status === 'COMPLETED') {
+      const mm = Math.floor(durationSec / 60).toString().padStart(2, '0');
+      const ss = Math.floor(durationSec % 60).toString().padStart(2, '0');
+      text = `${mediaLabel} ${mm}:${ss}`;
+    } else if (status === 'MISSED') {
+      text = isSelf ? t('call.noAnswer') : t('call.recordMissed');
+      danger = true;
+    } else if (status === 'REJECTED') {
+      text = isSelf ? t('call.recordRejectedByPeer') : t('call.recordRejectedByMe');
+      danger = true;
+    } else if (status === 'CANCELED') {
+      text = isSelf ? t('call.recordCanceledByMe') : t('call.recordCanceledByPeer');
+    } else if (status === 'FAILED') {
+      text = t('call.recordFailed');
+      danger = true;
+    } else {
+      text = mediaLabel;
+    }
+    return (
+      <div
+        className={`${styles.callBubble} ${danger ? styles.callBubbleDanger : ''}`}
+        onClick={() => message.status !== 'sending' && onCallRecord?.(media)}
+      >
+        <span className={styles.callBubbleIcon}>{media === 'video' ? <Video size={16} strokeWidth={1.8} /> : <Phone size={16} strokeWidth={1.8} />}</span>
+        <span>{text}</span>
+      </div>
+    );
+  };
+
+  /**
+   * 外部地址的媒体消息：不自动加载（防追踪/客户端请求伪造），降级为普通链接展示。
+   */
+  const renderExternalMedia = (content: string) => (
+    <div className={styles.fileCard}>
+      <span>🔗 </span>
+      <a href={content} target="_blank" rel="noreferrer nofollow" className={styles.fileName}>
+        {content}
+      </a>
+    </div>
+  );
+
   const renderContent = () => {
     switch (message.msgType) {
+      case 'CALL':
+        return renderCallBubble();
       case 'TEXT':
         return <div className={styles.text}>{renderTextWithMentions(message.content)}</div>;
       case 'IMAGE': {
         // 检查是否有附带文本（多模态消息）
         const textContent = message.headers?.textContent;
+        // 外部地址不自动加载（防客户端请求伪造 R4-02），降级为链接
+        if (!isInlineMediaSrc(message.content)) {
+          return renderExternalMedia(message.content);
+        }
         return (
           <>
             <div className={styles.mediaWrapper}>
               <MediaImage
-                src={resolveFileUrl(message.content)}
+                rawSrc={message.content}
                 alt={t('chat.imageVideo')}
-                onClick={() => message.status !== 'sending' && onImageClick?.(resolveFileUrl(message.content))}
+                onClick={(src) => message.status !== 'sending' && onImageClick?.(src)}
               />
               {message.status === 'sending' && (
                 <div className={styles.uploadMask}>
@@ -430,18 +550,12 @@ const MessageBubble = ({ message, isSelf, senderName, senderAvatar, showSenderNa
         );
       }
       case 'VIDEO':
+        if (!isInlineMediaSrc(message.content)) {
+          return renderExternalMedia(message.content);
+        }
         return (
           <div className={styles.videoWrapper}>
-            <video
-              src={resolveFileUrl(message.content)}
-              controls
-              className={styles.video}
-              onPlay={(e) => (e.currentTarget.parentElement?.classList.add(styles.videoPlaying))}
-              onPause={(e) => (e.currentTarget.parentElement?.classList.remove(styles.videoPlaying))}
-            />
-            <div className={styles.videoOverlay}>
-              <div className={styles.playBtn}>▶</div>
-            </div>
+            <MediaVideo rawSrc={message.content} />
             {message.status === 'sending' && (
               <div className={styles.uploadMask}>
                 <span>{message.progress ?? 0}%</span>
@@ -472,24 +586,7 @@ const MessageBubble = ({ message, isSelf, senderName, senderAvatar, showSenderNa
     );
   }
 
-  // 通话记录：居中记录条（G2）
-  if (message.msgType === 'CALL') {
-    const media = message.headers?.media === 'video' ? 'video' : 'audio';
-    const status = message.headers?.callStatus || '';
-    const text = formatCallRecordText(media, status, Number(message.headers?.duration || 0), t);
-    const tone =
-      status === 'MISSED' || status === 'REJECTED' ? styles.callRecordDanger
-        : status === 'CANCELED' || status === 'FAILED' ? styles.callRecordMuted
-        : '';
-    return (
-      <div className={styles.callRecord}>
-        <span className={`${styles.callRecordChip} ${tone}`}>
-          <span className={styles.callRecordIcon}>{media === 'video' ? '📹' : '📞'}</span>
-          {text}
-        </span>
-      </div>
-    );
-  }
+  // 通话记录：渲染为普通消息气泡（见 renderCallBubble）
 
   const renderQuote = (standalone: boolean) => {
     if (!message.replyTo) return null;

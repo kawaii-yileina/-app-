@@ -40,6 +40,9 @@
 .list {
   overflow-y: auto;
   padding: 12px 14px 24px;
+}
+/* 下拉刷新容器：把卡片纵向间距放到内容容器上（PullToRefresh 会额外包一层，直接子元素不再是卡片） */
+.list :global(.adm-pull-to-refresh-content) {
   display: flex;
   flex-direction: column;
   gap: 10px;

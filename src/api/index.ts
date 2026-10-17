@@ -166,23 +166,66 @@ export const callApi = {
     api.get<any, Result<{ iceServers: RTCIceServer[]; ttl: number }>>('/call/ice-config'),
 };
 
+/** 单文件上传上限（与后端 multipart / nginx 保持一致） */
+export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+
 export const fileApi = {
   upload: async (
     file: File,
     onProgress?: (percent: number) => void
   ): Promise<{ url: string; key: string }> => {
+    if (file.size > MAX_UPLOAD_BYTES) {
+      throw new Error('FILE_TOO_LARGE');
+    }
     const formData = new FormData();
     formData.append('file', file);
     const response = await api.post<any, Result<{ url: string; key: string }>>('/files/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      // 大文件上行较慢，单独放宽超时（全局默认 120s）
+      timeout: 600000,
       onUploadProgress: (e) => {
         if (onProgress && e.total) {
           onProgress(Math.round((e.loaded / e.total) * 100));
         }
       },
     });
+    if (response.code !== 200 || !response.data) {
+      const message = response.message || '';
+      // 后端超限拒绝（HTTP 200 + code 400）映射为统一的前端提示
+      throw new Error(response.code === 400 && /100MB|大小/.test(message) ? 'FILE_TOO_LARGE' : (message || 'UPLOAD_FAILED'));
+    }
     return response.data;
   },
+
+  multipartInit: (data: { fileName: string; contentType: string; size: number; totalParts: number }) =>
+    api.post<any, Result<{ uploadId: string; partSize: number }>>('/files/multipart/init', data),
+
+  multipartPart: (
+    uploadId: string,
+    partNumber: number,
+    blob: Blob,
+    onProgress?: (loaded: number, total: number) => void
+  ): Promise<Result<void>> => {
+    const formData = new FormData();
+    formData.append('file', blob);
+    return api.post<any, Result<void>>(
+      `/files/multipart/part?uploadId=${encodeURIComponent(uploadId)}&partNumber=${partNumber}`,
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 600000,
+        onUploadProgress: (e) => {
+          if (onProgress && e.total) onProgress(e.loaded, e.total);
+        },
+      }
+    );
+  },
+
+  multipartStatus: (uploadId: string) =>
+    api.get<any, Result<number[]>>('/files/multipart/status', { params: { uploadId } }),
+
+  multipartComplete: (uploadId: string) =>
+    api.post<any, Result<{ url: string; key: string }>>('/files/multipart/complete', { uploadId }),
 };
 
 export const emojiApi = {

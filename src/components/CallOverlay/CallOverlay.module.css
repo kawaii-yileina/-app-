@@ -39,23 +39,24 @@
   background: rgba(20, 16, 18, 0.42);
 }
 
-.top {
+/* 左上角：最小化（悬浮小窗）按钮 */
+.minimizeBtn {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 4;
+  width: 40px;
+  height: 40px;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  z-index: 1;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.32);
+  color: #fff;
+  cursor: pointer;
 }
-.mediaTag {
-  font-size: var(--c-font-xs, 11px);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  padding: 5px 14px;
-  border-radius: var(--c-radius-full, 9999px);
-  background: rgba(0, 0, 0, 0.26);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  font-weight: 600;
-}
+.minimizeBtn:active { transform: scale(0.92); }
 
 .center {
   display: flex;
@@ -141,19 +142,26 @@
   100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
 }
 
+/* 底部操作区：整齐的换行网格（3 列，末行居中） */
 .actions {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 44px;
   z-index: 1;
   width: 100%;
+  display: flex;
+  justify-content: center;
+}
+.actionGrid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 22px 40px;
+  max-width: 340px;
 }
 .action {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  width: 74px;
   background: none;
   border: none;
   color: #fff;
@@ -176,12 +184,11 @@
   color: #fff;
 }
 .btn svg { width: 26px; height: 26px; }
-.btn svg.rotated { transform: rotate(135deg); }
 
 .btnAccept { background: #34b27b; color: #fff; }
 .btnReject { background: var(--c-hangup, #e4586b); color: #fff; }
 .btnHangup { background: var(--c-hangup, #e4586b); color: #fff; }
-/* 开态（麦开/摄像头开）：白色实心 + 深色图标；关态回到半透明白 */
+/* 开态（麦开/扬声器开/摄像头开）：白色实心 + 深色图标；关态回到半透明白 */
 .btnOn {
   background: #ffffff;
   color: var(--c-call-bg, #3a3436);
@@ -191,10 +198,11 @@
 .actionLabel {
   font-size: var(--c-font-sm, 13px);
   opacity: 0.9;
+  white-space: nowrap;
 }
 
-/* 视频通话：远端全屏 + 本地画中画 */
-.videoRemote {
+/* 视频通话：主画面全屏 + 右上角本地小窗（点击互换） */
+.videoMain {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -202,7 +210,7 @@
   object-fit: cover;
   background: #111;
 }
-.videoLocal {
+.videoPip {
   position: absolute;
   top: 22px;
   right: 22px;
@@ -214,57 +222,97 @@
   z-index: 2;
   background: #222;
 }
-
-/* 视频模式下，内容叠加在视频之上 */
 .videoMode { justify-content: flex-end; background: #111; }
 .videoMode .callBg { display: none; }
 .videoMode .scrim { display: none; }
-.videoMode .top {
+.videoMode .actions { margin-top: auto; }
+
+/* 视频模式顶部：名称 + 状态 */
+.videoHeader {
   position: absolute;
-  top: 40px;
+  top: 44px;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
 }
-.videoMode .center { display: none; }
-.videoMode .actions { margin-top: 18px; }
 
 .hiddenMedia { display: none; }
 
-/* 最小化悬浮胶囊 */
-.miniPill {
+/* 最小化：右上角悬浮小窗（点击还原；含快捷静音/摄像头/挂断） */
+.miniWindow {
   position: fixed;
-  right: 16px;
-  bottom: 84px;
+  top: 72px;
+  right: 14px;
   z-index: 3000;
+  width: 116px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(24, 20, 22, 0.92);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+  color: #fff;
+  animation: callFadeIn 200ms ease;
+  touch-action: none;
+  user-select: none;
+}
+.miniPreview {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  background: #1c1a1b;
+  cursor: pointer;
+}
+.miniVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #222;
+}
+.miniBigAvatar {
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 12px 7px 7px;
+  justify-content: center;
+  font-size: 44px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.miniBigAvatar img { width: 100%; height: 100%; object-fit: cover; }
+.miniMeta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 8px 5px;
+  background: rgba(0, 0, 0, 0.5);
+}
+.miniName { font-size: 12px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.miniTime { font-size: 11px; opacity: 0.9; font-variant-numeric: tabular-nums; }
+.miniQuick {
+  display: flex;
+  justify-content: space-around;
+  padding: 6px 4px;
+  background: rgba(0, 0, 0, 0.28);
+}
+.miniBtn {
+  width: 28px;
+  height: 28px;
   border: none;
-  border-radius: 9999px;
-  background: rgba(24, 20, 22, 0.86);
-  color: #fff;
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32);
-  cursor: pointer;
-  font-size: 13px;
-  animation: callFadeIn 200ms ease;
-}
-.miniChevron {
-  width: 18px;
-  height: 18px;
-  opacity: 0.9;
-}
-.miniAvatar {
-  width: 34px;
-  height: 34px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fff;
-  color: var(--c-primary-ink, #c33f55);
-  font-weight: 600;
-  overflow: hidden;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  cursor: pointer;
 }
-.miniAvatar img { width: 100%; height: 100%; object-fit: cover; }
-.miniMeta { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; }
-.miniName { font-weight: 600; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.miniTime { font-size: 12px; opacity: 0.94; font-variant-numeric: tabular-nums; }
+.miniBtn:active { transform: scale(0.9); }
+.miniBtnHangup { background: var(--c-hangup, #e4586b); }

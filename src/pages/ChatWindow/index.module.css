@@ -67,31 +67,6 @@
   gap: 4px;
 }
 
-.callBtn {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--c-primary-ink);
-  border-radius: 50%;
-  cursor: pointer;
-}
-.callBtn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-.callBtn svg {
-  width: 20px;
-  height: 20px;
-}
-.callBtn:active {
-  background: var(--c-primary-tint);
-}
-
 .modelBtn {
   font-size: 12px;
   color: var(--c-primary-ink);
@@ -561,6 +536,8 @@
 .actionCamera { color: var(--c-accent); background: var(--c-accent-tint); }
 .actionVideo { color: var(--c-primary-ink); background: var(--c-warm); }
 .actionFile { color: var(--c-success); background: var(--c-success-tint); }
+.actionCallVoice { color: var(--c-success); background: var(--c-success-tint); }
+.actionCallVideo { color: var(--c-accent); background: var(--c-accent-tint); }
 
 .iconBtnActive {
   color: var(--c-primary);
@@ -881,29 +858,4 @@
   padding: 24px 0;
 }
 
-/* 通话最小化（聊天页内联条）：位于输入栏上方，占位不遮挡消息 */
-.callBar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 10px 8px;
-  padding: 6px 12px;
-  border-radius: var(--c-radius-lg, 16px);
-  background: var(--c-primary);
-  color: var(--c-surface);
-  cursor: pointer;
-  box-shadow: var(--c-shadow-md);
-  animation: callBarIn 180ms ease;
-}
-@keyframes callBarIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.callBarAvatar {
-  width: 30px; height: 30px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  background: #fff; color: var(--c-primary-ink, #e4687e);
-  font-weight: 600; overflow: hidden; flex: 0 0 auto;
-}
-.callBarAvatar img { width: 100%; height: 100%; object-fit: cover; }
-.callBarMeta { display: flex; flex-direction: column; line-height: 1.2; flex: 1; min-width: 0; }
-.callBarName { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.callBarHint { font-size: 12px; opacity: 0.9; }
-.callBarChevron { font-size: 22px; line-height: 1; opacity: 0.9; }
+/* 通话最小化由 CallOverlay 的悬浮小窗统一承载（见 CallOverlay.module.css） */

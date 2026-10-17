@@ -1,6 +1,9 @@
+import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Toast } from 'antd-mobile';
+import i18n from '../i18n';
 import { resolveFileUrl } from './fileUrl';
+import { getCachedBlob } from '../services/mediaCache';
 
 const blobToBase64 = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -21,22 +24,36 @@ const getFilenameFromUrl = (url: string): string => {
 
 export const downloadFile = async (url: string, filename?: string): Promise<boolean> => {
   const resolvedUrl = resolveFileUrl(url);
-  const name = filename || getFilenameFromUrl(resolvedUrl);
+  // 文件名来自消息 headers（发送方可控），净化路径分隔符避免穿越
+  const name = (filename || getFilenameFromUrl(resolvedUrl)).replace(/[/\\]/g, '_');
+  const t = i18n.t.bind(i18n);
 
   try {
-    const response = await fetch(resolvedUrl);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const blob = await response.blob();
-    const base64 = await blobToBase64(blob);
+    // 优先走本地缓存（命中直接取 blob，避免重复下载）
+    const blob = await getCachedBlob(url);
 
-    await Filesystem.writeFile({
-      path: `Download/IM/${name}`,
-      data: base64,
-      directory: Directory.ExternalStorage,
-      recursive: true,
-    });
-
-    Toast.show({ content: `已保存到 Download/IM` });
+    if (Capacitor.isNativePlatform()) {
+      // 原生：写入应用外部存储 Download/IM
+      const base64 = await blobToBase64(blob);
+      await Filesystem.writeFile({
+        path: `Download/IM/${name}`,
+        data: base64,
+        directory: Directory.ExternalStorage,
+        recursive: true,
+      });
+      Toast.show({ content: t('chat.downloadSaved') });
+    } else {
+      // Web：用 blob 触发浏览器下载（保留正确文件名）
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+      Toast.show({ content: t('chat.downloadStarted') });
+    }
     return true;
   } catch (e) {
     console.error('Download failed:', e);
@@ -44,7 +61,7 @@ export const downloadFile = async (url: string, filename?: string): Promise<bool
       window.open(resolvedUrl, '_system');
       return true;
     } catch {
-      Toast.show({ content: '下载失败' });
+      Toast.show({ content: t('chat.downloadFailed') });
       return false;
     }
   }

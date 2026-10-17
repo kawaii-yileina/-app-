@@ -1,7 +1,11 @@
 import type { ChatMessage } from '../types';
 import type { CallEndReason, CallMedia } from '../types/call';
+import { Dialog, Toast } from 'antd-mobile';
+import i18n from '../i18n';
 import wsService from './websocket';
 import { callApi } from '../api';
+import { openAppSettings, isNativePlatform } from './appSettings';
+import { setNativeSpeakerphone, releaseNativeAudio } from './callAudio';
 import { useCallStore } from '../store/useCallStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useContactStore } from '../store/useContactStore';
@@ -53,6 +57,64 @@ class CallManager {
       media === 'video' ? { audio: true, video: true } : { audio: true, video: false };
     this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
     useCallStore.getState().setPeerStreams(this.localStream, this.remoteStream);
+  }
+
+  /**
+   * 主叫等待接听期间的本地采集：视频只开摄像头做本地预览、语音不采集。
+   * 关键在于此时**不开麦克风**——否则 WebView 的 WebRTC 会把音频切到通话模式，
+   * 音量键调的是通话音量，铃声（铃声流）音量无法调整。麦克风延后到接听后补上。
+   */
+  private async openOutgoingPreview(media: CallMedia) {
+    if (media !== 'video') {
+      return;
+    }
+    this.localStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+    useCallStore.getState().setPeerStreams(this.localStream, this.remoteStream);
+  }
+
+  /** 接通后补齐麦克风（主叫在收到接听后调用）；已存在音频轨则跳过 */
+  private async attachMicrophone() {
+    if (this.localStream && this.localStream.getAudioTracks().length > 0) {
+      return;
+    }
+    const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const track = audioStream.getAudioTracks()[0];
+    if (!track) {
+      return;
+    }
+    track.enabled = !useCallStore.getState().muted;
+    if (this.localStream) {
+      this.localStream.addTrack(track);
+    } else {
+      this.localStream = audioStream;
+    }
+    useCallStore.getState().setPeerStreams(this.localStream, this.remoteStream);
+  }
+
+  /** 采集失败（多为相机/麦克风权限被拒）：结束通话并引导开启权限 */
+  private failPermission() {
+    this.end('permission');
+    const t = i18n.t.bind(i18n);
+    if (isNativePlatform()) {
+      // 原生 App：弹窗引导一键跳转系统权限设置（用户常不知如何开启）
+      Dialog.show({
+        content: t('call.permissionDenied'),
+        closeOnAction: true,
+        actions: [
+          {
+            key: 'settings',
+            text: t('call.openSettings'),
+            bold: true,
+            onClick: () => {
+              void openAppSettings();
+            },
+          },
+          { key: 'cancel', text: t('common.cancel') },
+        ],
+      });
+    } else {
+      Toast.show({ content: t('call.permissionDenied') });
+    }
   }
 
   /** 建连前拉取 ICE 配置（含 TURN 临时凭证）；失败则保留兜底 STUN。并按 TTL 定时刷新（预热后续呼叫/重连配置） */
@@ -108,20 +170,23 @@ class CallManager {
     this.role = 'caller';
     useCallStore.getState().beginOutgoing({ id: peerId, name, avatar }, callId, media);
     try {
-      await this.openLocalMedia(media);
+      // 仅视频做本地预览；不采集麦克风（见 openOutgoingPreview 注释）
+      await this.openOutgoingPreview(media);
     } catch (e) {
       console.error('getUserMedia failed:', e);
-      this.end('permission');
+      this.failPermission();
       return;
     }
     // 异步期间用户可能已取消：复核状态，避免发出已放弃的呼叫
     if (useCallStore.getState().phase !== 'outgoing' || this.role !== 'caller') {
       this.localStream?.getTracks().forEach((t) => t.stop());
+      this.localStream = null;
       return;
     }
     await this.loadIceServers();
     if (useCallStore.getState().phase !== 'outgoing' || this.role !== 'caller') {
       this.localStream?.getTracks().forEach((t) => t.stop());
+      this.localStream = null;
       return;
     }
     if (!this.send('CALL_INVITE', peerId, { callId, media })) {
@@ -143,19 +208,21 @@ class CallManager {
       console.error('getUserMedia failed:', e);
       // 本端无法采集：通知主叫并结束（原因：权限）
       this.send('CALL_REJECT', s.peer.id, { callId: s.callId, reason: 'permission' });
-      this.end('permission');
+      this.failPermission();
       return;
     }
     // 异步期间用户可能已拒接/取消
     const st = useCallStore.getState();
     if (st.phase !== 'connecting' || this.role !== 'callee' || !st.callId || !st.peer) {
       this.localStream?.getTracks().forEach((t) => t.stop());
+      this.localStream = null;
       return;
     }
     await this.loadIceServers();
     const st2 = useCallStore.getState();
     if (st2.phase !== 'connecting' || this.role !== 'callee' || !st2.callId || !st2.peer) {
       this.localStream?.getTracks().forEach((t) => t.stop());
+      this.localStream = null;
       return;
     }
     if (!this.send('CALL_ACCEPT', st2.peer.id, { callId: st2.callId })) {
@@ -196,6 +263,107 @@ class CallManager {
     this.localStream?.getVideoTracks().forEach((t) => (t.enabled = !next));
     s.setCameraOff(next);
     return next;
+  }
+
+  /** 前后摄像头切换（视频通话）：优先原地 applyConstraints（不重开摄像头，更快）；不支持时回退重开新轨 */
+  async flipCamera(): Promise<void> {
+    const s = useCallStore.getState();
+    if (s.media !== 'video' || !this.localStream) {
+      return;
+    }
+    const oldTrack = this.localStream.getVideoTracks()[0];
+    if (!oldTrack) {
+      return;
+    }
+    const current = oldTrack.getSettings?.().facingMode;
+    const facingMode = current === 'environment' ? 'user' : 'environment';
+
+    // 优化路径：设备支持 facingMode 能力时原地切换
+    try {
+      const caps = oldTrack.getCapabilities?.() as (MediaTrackCapabilities & { facingMode?: string[] }) | undefined;
+      if (Array.isArray(caps?.facingMode) && caps.facingMode.length > 1) {
+        await oldTrack.applyConstraints({ facingMode: { ideal: facingMode } } as MediaTrackConstraints);
+        return;
+      }
+    } catch (e) {
+      console.warn('applyConstraints facingMode failed, fallback to reopen camera:', e);
+    }
+
+    // 回退路径：重开摄像头新轨并替换
+    let newTrack: MediaStreamTrack | undefined;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode } });
+      newTrack = stream.getVideoTracks()[0];
+      if (!newTrack || !this.localStream) {
+        newTrack?.stop();
+        return;
+      }
+      newTrack.enabled = !s.cameraOff;
+      const sender = this.pc?.getSenders().find((sn) => sn.track?.kind === 'video');
+      if (sender) {
+        await sender.replaceTrack(newTrack);
+      }
+      this.localStream.removeTrack(oldTrack);
+      this.localStream.addTrack(newTrack);
+      oldTrack.stop();
+    } catch (e) {
+      newTrack?.stop();
+      console.error('flipCamera failed:', e);
+      throw e;
+    }
+  }
+
+  /**
+   * 切换扬声器/听筒：Android WebView 无标准 API，尽力而为——通过 setSinkId 选择输出设备；
+   * 设备/浏览器不支持时抛错，由 UI 给出提示（不改变状态）。
+   */
+  async toggleSpeaker(): Promise<void> {
+    const s = useCallStore.getState();
+    const next = !s.speakerOn;
+    const changed = await this.applyAudioOutput(next);
+    if (!changed) {
+      throw new Error('speaker-unsupported');
+    }
+    useCallStore.getState().setSpeakerOn(next);
+  }
+
+  private async applyAudioOutput(speaker: boolean): Promise<boolean> {
+    // 原生 App：走 AudioManager 切扬声器/听筒
+    if (isNativePlatform()) {
+      // 响铃期不切音频模式：通话模式下音量键调的是通话音量，会让铃声大小无法调节。
+      // 实际音频路由在接通后由 markActive → setNativeSpeakerphone 应用。
+      const phase = useCallStore.getState().phase;
+      if (phase === 'outgoing' || phase === 'incoming') {
+        return true;
+      }
+      return setNativeSpeakerphone(speaker);
+    }
+    // Web：尽力而为，通过 setSinkId 选择输出设备
+    const el = document.querySelector('[data-call-output]') as
+      | (HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> })
+      | null;
+    if (!el || typeof el.setSinkId !== 'function' || !navigator.mediaDevices?.enumerateDevices) {
+      return false;
+    }
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const pick = devices
+        .filter((d) => d.kind === 'audiooutput')
+        .find((d) => {
+          const label = (d.label || '').toLowerCase();
+          return speaker
+            ? label.includes('speaker') || label.includes('扬声')
+            : label.includes('earpiece') || label.includes('听筒') || label.includes('receiver');
+        });
+      if (!pick) {
+        return false;
+      }
+      await el.setSinkId(pick.deviceId);
+      return true;
+    } catch (e) {
+      console.warn('applyAudioOutput failed:', e);
+      return false;
+    }
   }
 
   /** 处理入站信令 */
@@ -285,6 +453,8 @@ class CallManager {
       if (pc.connectionState === 'connected') {
         if (useCallStore.getState().phase !== 'active') {
           useCallStore.getState().markActive();
+          // 接通后按当前状态应用扬声器路由（原生）
+          void setNativeSpeakerphone(useCallStore.getState().speakerOn);
         }
       } else if (pc.connectionState === 'failed') {
         if (useCallStore.getState().phase !== 'ended') {
@@ -295,9 +465,27 @@ class CallManager {
     this.localStream?.getTracks().forEach((t) => pc.addTrack(t, this.localStream!));
   }
 
-  /** 主叫：收到接听 → 建连并发送 Offer */
+  /** 主叫：收到接听 → 补齐麦克风、建连并发送 Offer */
   private async onAccepted() {
     useCallStore.getState().setPhase('connecting');
+    try {
+      await this.attachMicrophone();
+    } catch (e) {
+      console.error('getUserMedia(mic) failed:', e);
+      const s = useCallStore.getState();
+      if (s.peer && s.callId) {
+        this.send('CALL_HANGUP', s.peer.id, { callId: s.callId });
+      }
+      this.failPermission();
+      return;
+    }
+    // 异步期间用户可能已挂断
+    const st = useCallStore.getState();
+    if (st.phase !== 'connecting' || this.role !== 'caller' || !st.peer) {
+      this.localStream?.getTracks().forEach((t) => t.stop());
+      this.localStream = null;
+      return;
+    }
     this.createPc();
     try {
       const offer = await this.pc!.createOffer();
@@ -384,6 +572,7 @@ class CallManager {
     this.pendingCandidates = [];
     this.role = null;
     this.clearIceRefresh();
+    void releaseNativeAudio();
     useCallStore.getState().markEnded(reason);
   }
 }

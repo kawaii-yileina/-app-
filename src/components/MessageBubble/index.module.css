@@ -113,6 +113,14 @@
   cursor: pointer;
 }
 
+.imageLoading {
+  width: 120px;
+  height: 120px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  background: var(--c-surface-2);
+}
+
 .video {
   max-width: 250px;
   border-radius: 6px;
@@ -131,6 +139,12 @@
 .videoWrapper .video {
   max-width: 100%;
   display: block;
+}
+
+.videoPlaceholder {
+  width: 220px;
+  height: 160px;
+  background: #000;
 }
 
 .videoOverlay {
@@ -169,6 +183,7 @@
   min-width: 200px;
   text-decoration: none;
   color: inherit;
+  cursor: pointer;
 }
 
 .fileIcon {
@@ -531,28 +546,17 @@
   opacity: 0.7;
 }
 
-.callRecordIcon { margin-right: 6px; }
-
-/* 通话记录：居中胶囊，按状态着色 */
-.callRecord {
-  text-align: center;
-  margin: 8px 0;
-}
-.callRecordChip {
+/* 通话记录：以普通消息气泡呈现（图标 + 文案，点击重拨） */
+.callBubble {
   display: inline-flex;
   align-items: center;
-  padding: 5px 12px;
-  border-radius: var(--radius-full, 9999px);
-  font-size: 12px;
-  line-height: 1.2;
-  color: var(--c-text-secondary);
-  background: var(--c-surface-2);
-  border: 1px solid var(--c-border);
+  gap: 8px;
+  cursor: pointer;
 }
-.callRecordDanger {
+.callBubbleIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.callBubbleDanger {
   color: var(--c-danger);
-  border-color: var(--c-danger);
-}
-.callRecordMuted {
-  color: var(--c-text-muted);
 }

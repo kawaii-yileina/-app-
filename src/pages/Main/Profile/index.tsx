@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../../store/useAuthStore';
 import { authApi, fileApi } from '../../../api';
 import { resolveFileUrl } from '../../../utils/fileUrl';
-import { RightOutline, SetOutline, StarOutline, UserOutline } from 'antd-mobile-icons';
+import { ChevronRight, Settings, Sparkles, User } from 'lucide-react';
 import AvatarEditor from '../../../components/AvatarEditor';
 import SharedAvatar from '../../../components/SharedAvatar';
 import styles from './index.module.css';
@@ -56,24 +56,24 @@ const Profile = () => {
           {user?.signature && <div className={styles.signature}>{user.signature}</div>}
           <div className={styles.id}>{t('profile.account')}: {user?.username}</div>
         </div>
-        <RightOutline className={styles.arrow} />
+        <ChevronRight className={styles.arrow} size={20} strokeWidth={1.8} />
       </div>
 
       <List className={styles.list}>
         <List.Item
-          prefix={<UserOutline />}
+          prefix={<User size={20} strokeWidth={1.8} />}
           onClick={() => navigate('/profile/info')}
         >
           {t('profile.myInfo')}
         </List.Item>
         <List.Item
-          prefix={<StarOutline />}
+          prefix={<Sparkles size={20} strokeWidth={1.8} />}
           onClick={() => navigate('/profile/ai')}
         >
           {t('profile.aiSettings')}
         </List.Item>
         <List.Item
-          prefix={<SetOutline />}
+          prefix={<Settings size={20} strokeWidth={1.8} />}
           onClick={() => navigate('/profile/settings')}
         >
           {t('profile.settings')}

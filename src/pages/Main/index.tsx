@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { TabBar } from 'antd-mobile';
-import { MessageOutline, UserOutline, SetOutline } from 'antd-mobile-icons';
+import { MessageSquare, Users, CircleUser } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import styles from './index.module.css';
 
@@ -10,9 +10,9 @@ const Main = () => {
   const location = useLocation();
 
   const tabs = [
-    { key: '/chat', title: t('tab.chats'), icon: <MessageOutline /> },
-    { key: '/contacts', title: t('tab.contacts'), icon: <UserOutline /> },
-    { key: '/profile', title: t('tab.profile'), icon: <SetOutline /> },
+    { key: '/chat', title: t('tab.chats'), icon: <MessageSquare size={22} strokeWidth={1.8} /> },
+    { key: '/contacts', title: t('tab.contacts'), icon: <Users size={22} strokeWidth={1.8} /> },
+    { key: '/profile', title: t('tab.profile'), icon: <CircleUser size={22} strokeWidth={1.8} /> },
   ];
 
   const currentTab = tabs.find((t) => location.pathname.startsWith(t.key))?.key || '/chat';

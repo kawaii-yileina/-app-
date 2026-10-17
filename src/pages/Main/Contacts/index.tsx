@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Badge } from 'antd-mobile';
-import { AddCircleOutline, SearchOutline, TeamOutline, UserAddOutline, UserContactOutline } from 'antd-mobile-icons';
+import { Badge, PullToRefresh } from 'antd-mobile';
+import { CirclePlus, Search, Users, UserPlus, Inbox } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useContactStore } from '../../../store/useContactStore';
 import { useOnlineStore } from '../../../store/useOnlineStore';
 import { contactApi } from '../../../api';
+import { refreshFriends, refreshOnlineFriends } from '../../../services/refresh';
+import { usePullRefresh } from '../../../hooks/usePullRefresh';
 import SharedAvatar from '../../../components/SharedAvatar';
 import styles from './index.module.css';
 
@@ -31,6 +33,12 @@ const Contacts = () => {
     }
   };
 
+  const pullProps = usePullRefresh(async () => {
+    const [friendsOk, onlineOk] = await Promise.all([refreshFriends(), refreshOnlineFriends()]);
+    await loadRequestCount();
+    return friendsOk && onlineOk;
+  });
+
   const groupedFriends = friends.reduce<Record<string, typeof friends>>((acc, friend) => {
     const name = friend.nickname || friend.username || '';
     const firstChar = name.charAt(0)?.toUpperCase() || '#';
@@ -50,28 +58,29 @@ const Contacts = () => {
       <div className={styles.header}>
         <span className={styles.title}>{t('tab.contacts')}</span>
         <div className={styles.addBtn} onClick={() => navigate('/contacts/search')}>
-          <AddCircleOutline />
+          <CirclePlus size={20} strokeWidth={1.8} />
         </div>
       </div>
 
       <div className={styles.body}>
+        <PullToRefresh {...pullProps}>
         <div className={styles.searchBar} onClick={() => navigate('/contacts/search')}>
-          <span className={styles.searchIcon}><SearchOutline /></span>
+          <span className={styles.searchIcon}><Search size={16} strokeWidth={2} /></span>
           <span className={styles.searchPlaceholder}>{t('common.search')}</span>
         </div>
 
         <div className={styles.entries}>
           <div className={styles.entry} onClick={() => navigate('/contacts/requests')}>
-            <div className={`${styles.entryIcon} ${styles.iconRequests}`}><UserContactOutline /></div>
+            <div className={`${styles.entryIcon} ${styles.iconRequests}`}><Inbox size={22} strokeWidth={1.8} /></div>
             <span className={styles.entryText}>{t('contacts.newFriends')}</span>
             <Badge content={requestCount > 0 ? String(requestCount) : undefined} className={styles.entryBadge} />
           </div>
           <div className={styles.entry} onClick={() => navigate('/contacts/groups')}>
-            <div className={`${styles.entryIcon} ${styles.iconGroups}`}><TeamOutline /></div>
+            <div className={`${styles.entryIcon} ${styles.iconGroups}`}><Users size={22} strokeWidth={1.8} /></div>
             <span className={styles.entryText}>{t('contacts.groups')}</span>
           </div>
           <div className={styles.entry} onClick={() => navigate('/contacts/search')}>
-            <div className={`${styles.entryIcon} ${styles.iconAdd}`}><UserAddOutline /></div>
+            <div className={`${styles.entryIcon} ${styles.iconAdd}`}><UserPlus size={22} strokeWidth={1.8} /></div>
             <span className={styles.entryText}>{t('contacts.addFriend')}</span>
           </div>
         </div>
@@ -103,6 +112,7 @@ const Contacts = () => {
             </div>
           ))}
         </div>
+        </PullToRefresh>
       </div>
     </div>
   );
