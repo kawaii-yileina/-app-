@@ -57,8 +57,18 @@ export const downloadFile = async (url: string, filename?: string): Promise<bool
     return true;
   } catch (e) {
     console.error('Download failed:', e);
+    // 兜底：交给浏览器新窗口下载；被拦截（返回 null）时明确失败，不能静默当作成功
     try {
-      window.open(resolvedUrl, '_system');
+      const opened = window.open(resolvedUrl, '_blank');
+      if (!opened) {
+        Toast.show({ content: t('chat.downloadFailed') });
+        return false;
+      }
+      try {
+        opened.opener = null;
+      } catch {
+        /* 跨域窗口无法修改 opener，忽略 */
+      }
       return true;
     } catch {
       Toast.show({ content: t('chat.downloadFailed') });

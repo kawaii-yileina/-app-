@@ -8,10 +8,11 @@ import { useContactStore } from '../../store/useContactStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useOnlineStore } from '../../store/useOnlineStore';
 import { useAiChatStore } from '../../stores/aiChatStore';
-import { messageApi, fileApi, contactApi, emojiApi } from '../../api';
+import { messageApi, fileApi, contactApi, emojiApi, MAX_UPLOAD_BYTES } from '../../api';
 import { uploadResumable } from '../../services/upload';
 import { getModels, getSessionDetail, lockModel, type HermesModel } from '../../api/hermes';
 import { downloadFile } from '../../utils/download';
+import { uploadErrorMessage } from '../../utils/uploadError';
 import { resolveFileUrl } from '../../utils/fileUrl';
 import {
   truncatePreview,
@@ -477,9 +478,22 @@ const ChatWindow = () => {
     }
   };
 
+  const resetFileInputs = () => {
+    [fileInputRef.current, albumInputRef.current, cameraInputRef.current, videoInputRef.current, docInputRef.current].forEach(input => {
+      if (input) input.value = '';
+    });
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetId || !user) return;
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      Toast.show({ content: t('chat.fileTooLarge') });
+      setShowActions(false);
+      resetFileInputs();
+      return;
+    }
 
     if (isAiChat) {
       // AI 聊天：添加到待发送列表
@@ -501,9 +515,11 @@ const ChatWindow = () => {
       if (msgType === 'FILE') {
         headers.originalName = file.name;
         headers.size = String(file.size);
+      } else if (msgType === 'VIDEO') {
+        headers.size = String(file.size);
       }
 
-      const localPreview = isImage ? URL.createObjectURL(file) : '';
+      const localPreview = isImage || isVideo ? URL.createObjectURL(file) : '';
       addMessage(conversationKey, {
         id: clientMsgId,
         msgId: clientMsgId,
@@ -532,7 +548,8 @@ const ChatWindow = () => {
           content: result.url,
           progress: 100,
         });
-        if (localPreview) URL.revokeObjectURL(localPreview);
+        // 延迟释放本地预览：避免 <video> 在切换到服务端地址前仍持有 blob URL 触发加载失败
+        if (localPreview) setTimeout(() => URL.revokeObjectURL(localPreview), 1000);
 
         if (!sendViaWs({
           type: msgType,
@@ -555,16 +572,14 @@ const ChatWindow = () => {
       } catch (e) {
         console.error('Failed to upload/send media:', e);
         useChatStore.getState().updateMessage(conversationKey, clientMsgId, { status: 'failed' });
-        Toast.show({ content: (e as Error)?.message === 'FILE_TOO_LARGE' ? t('chat.fileTooLarge') : t('chat.sendFailed') });
+        Toast.show({ content: uploadErrorMessage(e, 'chat.sendFailed') });
       }
     }
 
     setShowActions(false);
 
     // 清空 input
-    [fileInputRef.current, albumInputRef.current, cameraInputRef.current, videoInputRef.current, docInputRef.current].forEach(input => {
-      if (input) input.value = '';
-    });
+    resetFileInputs();
   };
 
   const handleRecordStart = async (e: React.PointerEvent) => {

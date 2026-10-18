@@ -1,8 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { File, Video, Phone, Play, Pause } from 'lucide-react';
-import { Toast } from 'antd-mobile';
+import { createPortal } from 'react-dom';
+import { File, Video, Phone, Play, Pause, X, Maximize2 } from 'lucide-react';
+import { Toast, SpinLoading } from 'antd-mobile';
 import { resolveFileUrl, isInlineMediaSrc } from '../../utils/fileUrl';
 import { useMediaUrl } from '../../hooks/useMediaUrl';
 import { getCachedObjectUrl } from '../../services/mediaCache';
@@ -71,49 +72,345 @@ const MediaImage = ({ rawSrc, alt, onClick }: { rawSrc: string; alt: string; onC
   );
 };
 
-/** 视频消息：点击播放时再按需下载并缓存，避免自动加载整段视频占用带宽 */
-const MediaVideo = ({ rawSrc }: { rawSrc: string }) => {
+const formatDuration = (seconds: number): string => {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '';
+  const total = Math.round(seconds);
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  return `${minutes}:${String(rest).padStart(2, '0')}`;
+};
+
+/**
+ * 视频消息：首帧封面 + 文件大小/时长，点击全屏播放（自定义进度条），
+ * 退出全屏后在气泡内从同一位置继续小窗播放。
+ */
+const VideoMessage = ({ rawSrc, size }: { rawSrc: string; size?: string }) => {
+  const { t } = useTranslation();
   const [url, setUrl] = useState<string | undefined>(undefined);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const pendingPlay = useRef(false);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [coverFailed, setCoverFailed] = useState(false);
+  const [poster, setPoster] = useState<string | undefined>(undefined);
+  const [playing, setPlaying] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [box, setBox] = useState({ width: 220, height: 124 });
+  const [time, setTime] = useState(0);
+  const [paused, setPaused] = useState(true);
+
+  const smallRef = useRef<HTMLVideoElement>(null);
+  const fullRef = useRef<HTMLVideoElement>(null);
+  const resumeAt = useRef(0);
+  const loadingRef = useRef(false);
+  const srcRef = useRef(rawSrc);
+
+  const coverSrc = `${resolveFileUrl(rawSrc)}#t=0.1`;
+  const sizeText = formatSize(size);
+
+  // 上传成功后 rawSrc 由本地 blob 切换为服务端地址：清空旧状态，避免继续使用已失效的 blob URL
+  useEffect(() => {
+    srcRef.current = rawSrc;
+    setUrl(undefined);
+    setLoading(false);
+    setFailed(false);
+    setCoverFailed(false);
+    setPlaying(false);
+    setFullscreen(false);
+    setTime(0);
+    setPaused(true);
+    resumeAt.current = 0;
+    loadingRef.current = false;
+  }, [rawSrc]);
 
   useEffect(() => {
-    if (url && pendingPlay.current && videoRef.current) {
-      pendingPlay.current = false;
-      videoRef.current.play().catch(() => {});
-    }
-  }, [url]);
+    if (!fullscreen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const video = fullRef.current;
+    video?.play().catch(() => {
+      // 自动播放被拦截时保持暂停态，由用户点击播放
+    });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        resumeAt.current = fullRef.current?.currentTime ?? 0;
+        setFullscreen(false);
+        setPlaying(true);
+        setPaused(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [fullscreen]);
 
-  const startPlay = async () => {
-    if (url) {
-      videoRef.current?.play().catch(() => {});
-      return;
+  // 退出全屏：小窗已在挂载时不会重新触发 loadedMetadata，这里显式同步到全屏的播放位置
+  useEffect(() => {
+    if (fullscreen) return;
+    const video = smallRef.current;
+    if (!playing || !video) return;
+    if (resumeAt.current > 0) {
+      video.currentTime = resumeAt.current;
     }
-    pendingPlay.current = true;
-    try {
-      setUrl(await getCachedObjectUrl(rawSrc));
-    } catch {
-      setUrl(resolveFileUrl(rawSrc));
+    video.play().catch(() => {
+      /* 自动播放被拦截时保留播放按钮，由用户手动继续 */
+    });
+  }, [fullscreen, playing]);
+
+  const readMeta = (video: HTMLVideoElement) => {
+    if (video.videoWidth && video.videoHeight) {
+      const maxWidth = 220;
+      const maxHeight = 260;
+      const ratio = video.videoWidth / video.videoHeight;
+      let width = maxWidth;
+      let height = maxWidth / ratio;
+      if (height > maxHeight) {
+        height = maxHeight;
+        width = maxHeight * ratio;
+      }
+      setBox({ width: Math.round(width), height: Math.round(height) });
+    }
+    if (Number.isFinite(video.duration) && video.duration > 0) {
+      setDuration(video.duration);
     }
   };
 
+  const capturePoster = (video: HTMLVideoElement) => {
+    if (poster) return;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx || !canvas.width || !canvas.height) return;
+      ctx.drawImage(video, 0, 0);
+      setPoster(canvas.toDataURL('image/jpeg', 0.72));
+    } catch {
+      /* 跨域画布或解码失败：保留 video 作为封面 */
+    }
+  };
+
+  const loadBlob = async (): Promise<string | undefined> => {
+    if (url) return url;
+    if (loadingRef.current) return undefined;
+    loadingRef.current = true;
+    setLoading(true);
+    setFailed(false);
+    const src = rawSrc;
+    try {
+      const next = await getCachedObjectUrl(src);
+      if (srcRef.current !== src) return undefined;
+      setUrl(next);
+      return next;
+    } catch {
+      if (srcRef.current === src) setFailed(true);
+      return undefined;
+    } finally {
+      if (srcRef.current === src) {
+        loadingRef.current = false;
+        setLoading(false);
+      }
+    }
+  };
+
+  const openFullscreen = async () => {
+    if (loadingRef.current) return;
+    const next = url ?? (await loadBlob());
+    if (!next) return;
+    resumeAt.current = 0;
+    setTime(0);
+    setPaused(true);
+    setFullscreen(true);
+  };
+
+  const openFullscreenFromSmall = () => {
+    const video = smallRef.current;
+    resumeAt.current = video?.currentTime ?? 0;
+    setTime(resumeAt.current);
+    setPaused(true);
+    video?.pause();
+    setFullscreen(true);
+  };
+
+  const closeFullscreen = () => {
+    resumeAt.current = fullRef.current?.currentTime ?? 0;
+    setFullscreen(false);
+    setPlaying(true);
+    setPaused(true);
+  };
+
+  const toggle = (video: HTMLVideoElement | null) => {
+    if (!video) return;
+    if (video.paused) {
+      video.play().catch(() => Toast.show({ content: t('chat.videoPlayFailed') }));
+    } else {
+      video.pause();
+    }
+  };
+
+  const seek = (event: React.MouseEvent<HTMLDivElement>, video: HTMLVideoElement | null) => {
+    if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    video.currentTime = ratio * video.duration;
+    setTime(video.currentTime);
+  };
+
+  const progress = duration > 0 ? Math.min(100, (time / duration) * 100) : 0;
+
   return (
     <>
-      {url ? (
-        <video
-          ref={videoRef}
-          src={url}
-          controls
-          className={styles.video}
-          onPlay={(e) => e.currentTarget.parentElement?.classList.add(styles.videoPlaying)}
-          onPause={(e) => e.currentTarget.parentElement?.classList.remove(styles.videoPlaying)}
-        />
-      ) : (
-        <div className={styles.videoPlaceholder} onClick={startPlay} />
-      )}
-      <div className={styles.videoOverlay}>
-        <div className={styles.playBtn}>▶</div>
+      <div className={styles.videoWrapper} style={{ width: box.width, height: box.height }}>
+        {playing ? (
+          <>
+            <video
+              ref={smallRef}
+              src={url}
+              className={styles.videoEl}
+              playsInline
+              autoPlay
+              onClick={() => toggle(smallRef.current)}
+              onLoadedMetadata={(e) => {
+                readMeta(e.currentTarget);
+                if (resumeAt.current > 0) e.currentTarget.currentTime = resumeAt.current;
+              }}
+              onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+              onPlay={() => setPaused(false)}
+              onPause={() => setPaused(true)}
+              onError={() => Toast.show({ content: t('chat.videoPlayFailed') })}
+            />
+            <button
+              type="button"
+              className={styles.videoMaxBtn}
+              onClick={openFullscreenFromSmall}
+              aria-label={t('chat.videoFullscreen')}
+            >
+              <Maximize2 size={16} strokeWidth={1.8} />
+            </button>
+            {paused && (
+              <button
+                type="button"
+                className={styles.videoToggle}
+                onClick={() => toggle(smallRef.current)}
+                aria-label={t('chat.videoPlay')}
+              >
+                <Play size={22} strokeWidth={1.8} />
+              </button>
+            )}
+            <div className={styles.videoBarWrap} onClick={(e) => seek(e, smallRef.current)}>
+              <div className={styles.videoTrack}>
+                <div className={styles.videoFill} style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {poster ? (
+              <img className={styles.videoCover} src={poster} alt="" />
+            ) : (
+              <video
+                className={styles.videoCover}
+                src={coverSrc}
+                preload="metadata"
+                muted
+                playsInline
+                onLoadedMetadata={(e) => readMeta(e.currentTarget)}
+                onLoadedData={(e) => capturePoster(e.currentTarget)}
+                onError={() => setCoverFailed(true)}
+              />
+            )}
+            <button
+              type="button"
+              className={styles.videoPreviewHit}
+              onClick={openFullscreen}
+              aria-label={t('chat.videoPlay')}
+            />
+            {loading ? (
+              <div className={styles.videoLoader}>
+                <SpinLoading color="white" />
+              </div>
+            ) : failed || coverFailed ? (
+              <div className={styles.videoError}>{t('chat.videoLoadFailed')}</div>
+            ) : (
+              <div className={styles.playBtn}>
+                <Play size={22} strokeWidth={1.8} />
+              </div>
+            )}
+            <div className={styles.videoMeta}>
+              {sizeText && <span className={styles.videoPill}>{sizeText}</span>}
+              {duration > 0 && (
+                <span className={`${styles.videoPill} ${styles.videoDuration}`}>{formatDuration(duration)}</span>
+              )}
+            </div>
+          </>
+        )}
       </div>
+      {fullscreen && url && createPortal(
+        <div className={styles.playerOverlay}>
+          <button
+            type="button"
+            className={styles.playerClose}
+            onClick={(e) => {
+              e.stopPropagation();
+              closeFullscreen();
+            }}
+            aria-label={t('chat.videoClose')}
+          >
+            <X size={22} strokeWidth={1.8} />
+          </button>
+          <video
+            ref={fullRef}
+            src={url}
+            className={styles.playerVideo}
+            playsInline
+            autoPlay
+            onClick={(e) => {
+              e.stopPropagation();
+              toggle(fullRef.current);
+            }}
+            onLoadedMetadata={(e) => {
+              readMeta(e.currentTarget);
+              if (resumeAt.current > 0) e.currentTarget.currentTime = resumeAt.current;
+            }}
+            onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+            onPlay={() => setPaused(false)}
+            onPause={() => setPaused(true)}
+            onError={() => Toast.show({ content: t('chat.videoPlayFailed') })}
+          />
+          {paused && (
+            <button
+              type="button"
+              className={styles.playerToggle}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle(fullRef.current);
+              }}
+              aria-label={t('chat.videoPlay')}
+            >
+              <Play size={30} strokeWidth={1.8} />
+            </button>
+          )}
+          <div className={styles.playerControls} onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className={styles.playerPlay}
+              onClick={() => toggle(fullRef.current)}
+              aria-label={paused ? t('chat.videoPlay') : t('chat.videoPause')}
+            >
+              {paused ? <Play size={18} strokeWidth={2} /> : <Pause size={18} strokeWidth={2} />}
+            </button>
+            <span className={styles.playerTime}>{formatDuration(time) || '0:00'}</span>
+            <div className={styles.playerBarWrap} onClick={(e) => seek(e, fullRef.current)}>
+              <div className={styles.playerTrack}>
+                <div className={styles.playerFill} style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+            <span className={styles.playerTime}>{formatDuration(duration) || '0:00'}</span>
+          </div>
+        </div>,
+        document.body
+      )}
     </>
   );
 };
@@ -555,7 +852,7 @@ const MessageBubble = ({ message, isSelf, senderName, senderAvatar, showSenderNa
         }
         return (
           <div className={styles.videoWrapper}>
-            <MediaVideo rawSrc={message.content} />
+            <VideoMessage rawSrc={message.content} size={message.headers?.size} />
             {message.status === 'sending' && (
               <div className={styles.uploadMask}>
                 <span>{message.progress ?? 0}%</span>

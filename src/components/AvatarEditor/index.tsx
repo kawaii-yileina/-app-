@@ -4,6 +4,7 @@ import { Popup, Button, Toast } from 'antd-mobile';
 import { Camera, Image as ImageIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Area } from 'react-easy-crop';
+import { uploadErrorMessage } from '../../utils/uploadError';
 import styles from './index.module.css';
 
 interface Props {
@@ -81,7 +82,7 @@ const AvatarEditor = ({ visible, onClose, onUpload }: Props) => {
       Toast.show({ content: t('common.success') });
       handleClose();
     } catch (e) {
-      Toast.show({ content: t('common.error') });
+      Toast.show({ content: uploadErrorMessage(e, 'common.error') });
     } finally {
       setSaving(false);
     }

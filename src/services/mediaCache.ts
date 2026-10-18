@@ -75,8 +75,10 @@ export function mediaCacheKey(url: string): string | null {
 
 /** 已创建的 object URL 复用表（同一 key 只创建一个） */
 const objectUrls = new Map<string, string>();
-/** 进行中的解析（single-flight）：同一 key 并发只下载一次 */
+/** 进行中的 object URL 解析（single-flight）：同一 key 并发只创建一个 object URL */
 const inflight = new Map<string, Promise<string>>();
+/** 进行中的 blob 加载（single-flight）：展示与下载共用，避免同一文件重复拉取 */
+const blobInflight = new Map<string, Promise<Blob>>();
 
 async function fetchBlob(rawUrl: string): Promise<Blob> {
   const res = await fetch(resolveFileUrl(rawUrl));
@@ -132,6 +134,32 @@ async function enforceLimit(db: IDBDatabase): Promise<void> {
   }
 }
 
+/** 读取缓存中的 blob；未命中时下载并写入缓存。 */
+async function loadBlobFromCache(rawUrl: string, key: string): Promise<Blob> {
+  const db = await openDb();
+  const rec = await getRecord(db, key);
+  if (rec) {
+    void touchRecord(db, key);
+    return rec.blob;
+  }
+  const blob = await fetchBlob(rawUrl);
+  await putRecord(db, { key, blob, size: blob.size, lastAccess: Date.now() });
+  void enforceLimit(db);
+  return blob;
+}
+
+/** 同一 key 并发只发起一次下载（展示与下载共享） */
+function loadBlobSingleFlight(rawUrl: string, key: string): Promise<Blob> {
+  let pending = blobInflight.get(key);
+  if (!pending) {
+    pending = loadBlobFromCache(rawUrl, key).finally(() => {
+      blobInflight.delete(key);
+    });
+    blobInflight.set(key, pending);
+  }
+  return pending;
+}
+
 /**
  * 取媒体 blob 的本地 object URL：命中缓存直接返回；否则下载后缓存再返回。
  * 非本站文件地址（含 data/blob/外链）直接返回解析后的网络地址。
@@ -152,17 +180,7 @@ export async function getCachedObjectUrl(rawUrl: string): Promise<string> {
   if (!pending) {
     pending = (async () => {
       try {
-        const db = await openDb();
-        const rec = await getRecord(db, key);
-        let blob: Blob;
-        if (rec) {
-          blob = rec.blob;
-          void touchRecord(db, key);
-        } else {
-          blob = await fetchBlob(rawUrl);
-          await putRecord(db, { key, blob, size: blob.size, lastAccess: Date.now() });
-          void enforceLimit(db);
-        }
+        const blob = await loadBlobSingleFlight(rawUrl, key);
         const obj = URL.createObjectURL(blob);
         objectUrls.set(key, obj);
         return obj;
@@ -193,14 +211,5 @@ export async function getCachedBlob(rawUrl: string): Promise<Blob> {
   if (!key) {
     return fetchBlob(rawUrl);
   }
-  const db = await openDb();
-  const rec = await getRecord(db, key);
-  if (rec) {
-    void touchRecord(db, key);
-    return rec.blob;
-  }
-  const blob = await fetchBlob(rawUrl);
-  await putRecord(db, { key, blob, size: blob.size, lastAccess: Date.now() });
-  void enforceLimit(db);
-  return blob;
+  return loadBlobSingleFlight(rawUrl, key);
 }

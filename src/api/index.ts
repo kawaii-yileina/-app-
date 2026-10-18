@@ -1,15 +1,29 @@
 import axios from 'axios';
 import type { Result, LoginResponse, User, Friend, Group, Message, MessageSyncResult, Conversation, GroupMember, AiConversation, UserAiConfig, SearchUser, FriendRequestItem, EmojiSticker } from '../types';
+import { createRestCryptoRequest, decryptRestPayload, type EncryptedPayload } from '../services/restCrypto';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 120000,
 });
 
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
   const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  if (config.restEncrypted) {
+    const crypto = await createRestCryptoRequest(
+      config.method || 'get',
+      config.url || '',
+      config.baseURL,
+    );
+    if (crypto) {
+      Object.entries(crypto.headers).forEach(([name, value]) => config.headers.set(name, value));
+      config._restCrypto = crypto.session;
+    } else {
+      delete config._restCrypto;
+    }
   }
   return config;
 });
@@ -54,7 +68,30 @@ function clearAuthAndRedirect() {
 }
 
 api.interceptors.response.use(
-  (response) => response.data,
+  async (response): Promise<any> => {
+    const payload = response.data as {
+      code?: number;
+      message?: string;
+      data?: unknown;
+      enc?: EncryptedPayload;
+    } | undefined;
+    const session = response.config._restCrypto;
+    if (session) {
+      if (payload?.enc) {
+        const data = await decryptRestPayload(payload.enc, session);
+        return { code: payload.code, message: payload.message, data };
+      }
+      // 业务错误（code != 200）不加密；成功响应必须带 enc，避免静默降级
+      if (payload?.code === 200 && payload.data != null) {
+        throw new Error('CRYPTO_RESPONSE_NOT_ENCRYPTED');
+      }
+      return payload;
+    }
+    if (payload?.enc) {
+      throw new Error('CRYPTO_RESPONSE_WITHOUT_SESSION');
+    }
+    return payload;
+  },
   async (error) => {
     const original = error.config;
     const status = error.response?.status;
@@ -137,22 +174,26 @@ export const userApi = {
 };
 
 export const messageApi = {
-  getHistory: (targetId: string, chatType: number, page = 1, size = 20) =>    api.get<any, Result<Message[]>>('/messages/history', {
+  getHistory: (targetId: string, chatType: number, page = 1, size = 20) =>
+    api.get<any, Result<Message[]>>('/messages/history', {
       params: { targetId, chatType, page, size },
+      restEncrypted: true,
     }),
-  getConversations: () => api.get<any, Result<Conversation[]>>('/messages/conversations'),
+  getConversations: () =>
+    api.get<any, Result<Conversation[]>>('/messages/conversations', { restEncrypted: true }),
   /** 会话增量同步：拉取 seq > sinceSeq 的消息，用于断线重连 / 多端补拉 */
   syncMessages: (targetId: string, chatType: number, sinceSeq = 0, limit = 200) =>
     api.get<any, Result<MessageSyncResult>>('/messages/sync', {
       params: { targetId, chatType, sinceSeq, limit },
+      restEncrypted: true,
     }),
   markAsRead: (targetId: string, chatType: number) =>
     api.put<any, Result<void>>('/messages/conversations/read', { targetId, chatType }),
   recallMessage: (msgId: string) =>
-    api.post<any, Result<void>>('/messages/recall', { msgId }),
+    api.post<any, Result<Message>>('/messages/recall', { msgId }, { restEncrypted: true }),
   /** 语音转文字（本地 ASR）：按 msgId 转写，返回文本 */
   transcribeVoice: (msgId: string) =>
-    api.post<any, Result<{ text: string }>>('/messages/voice/transcribe', { msgId }),
+    api.post<any, Result<{ text: string }>>('/messages/voice/transcribe', { msgId }, { restEncrypted: true }),
   deleteConversation: (targetId: string, chatType: number) =>
     api.delete<any, Result<void>>(`/messages/conversations/${targetId}/${chatType}`),
   getUnreadCounts: () => api.get<any, Result<Record<string, number>>>('/messages/unread'),

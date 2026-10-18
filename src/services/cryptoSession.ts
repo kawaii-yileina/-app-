@@ -1,4 +1,5 @@
 import type { ChatMessage } from '../types';
+import { b64, concat, hex, nonceFor, requireSubtle, sha256, unb64, utf8, utf8Decode } from './cryptoPrimitives';
 
 /**
  * 应用层消息加密客户端会话（Web Crypto）：P-256 ECDH + HKDF-SHA256 + AES-256-GCM。
@@ -13,13 +14,36 @@ export interface CryptoConfig {
   enabled: boolean;
   keyId: string;
   serverSpkiB64: string;
+  /** 内置的可信公钥集合（keyId → SPKI），支持双 key 轮换；为空时退回 serverSpkiB64 */
+  keys: Record<string, string>;
+}
+
+function parseKeyMap(raw?: string): Record<string, string> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const out: Record<string, string> = {};
+    Object.entries(parsed).forEach(([id, value]) => {
+      if (typeof value === 'string' && value.trim()) {
+        out[id] = value.trim();
+      }
+    });
+    return out;
+  } catch {
+    console.error('VITE_CRYPTO_KEYS 不是合法 JSON，已忽略');
+    return {};
+  }
 }
 
 export function loadCryptoConfig(): CryptoConfig {
+  const keys = parseKeyMap(import.meta.env.VITE_CRYPTO_KEYS);
+  const keyId = import.meta.env.VITE_CRYPTO_KEY_ID || Object.keys(keys)[0] || 'k1';
+  const serverSpkiB64 = keys[keyId] || import.meta.env.VITE_CRYPTO_SERVER_SPKI || '';
   return {
     enabled: String(import.meta.env.VITE_CRYPTO_ENABLED || '') === 'true',
-    keyId: import.meta.env.VITE_CRYPTO_KEY_ID || 'k1',
-    serverSpkiB64: import.meta.env.VITE_CRYPTO_SERVER_SPKI || '',
+    keyId,
+    serverSpkiB64,
+    keys,
   };
 }
 
@@ -35,56 +59,10 @@ export interface WireMessage {
   headers: Record<string, string>;
 }
 
-/** Web Crypto 只在安全上下文可用（Capacitor https scheme / localhost） */
-const subtle = (globalThis.crypto as Crypto | undefined)?.subtle;
-
-function requireSubtle(): SubtleCrypto {
-  if (!subtle) {
-    throw new Error('CRYPTO_UNAVAILABLE');
-  }
-  return subtle;
-}
-
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
-
-const utf8 = (s: string) => textEncoder.encode(s);
-const b64 = (bytes: Uint8Array) => {
-  let bin = '';
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin);
-};
-const unb64 = (s: string) => {
-  const bin = atob(s);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-};
-const hex = (bytes: Uint8Array) => Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-
-function nonceFor(prefix: Uint8Array, seq: number): Uint8Array {
-  const nonce = new Uint8Array(12);
-  nonce.set(prefix, 0);
-  const view = new DataView(nonce.buffer);
-  view.setBigUint64(4, BigInt(seq));
-  return nonce;
-}
-
 function aadStr(v: number, keyId: string, dir: string, seq: number, type: string,
                 id: string | undefined, from: string, to: string, group: boolean, ts: number): string {
   return `im-msg-v1|v=${v}|keyId=${keyId}|dir=${dir}|seq=${seq}|type=${type ?? ''}|id=${id ?? ''}`
     + `|from=${from ?? ''}|to=${to ?? ''}|group=${group}|ts=${ts}`;
-}
-
-async function sha256(bytes: Uint8Array): Promise<Uint8Array> {
-  return new Uint8Array(await requireSubtle().digest('SHA-256', bytes));
-}
-
-function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const out = new Uint8Array(a.length + b.length);
-  out.set(a, 0);
-  out.set(b, a.length);
-  return out;
 }
 
 export class CryptoSession {
@@ -96,6 +74,8 @@ export class CryptoSession {
   private transcript?: Uint8Array;
   private c2sKey?: CryptoKey;
   private s2cKey?: CryptoKey;
+  /** 握手确认后的实际 keyId（轮换期可能与首选 key 不同） */
+  private establishedKeyId?: string;
   private sendSeq = 0;
   private recvSeq = 0;
   private ready = false;
@@ -138,15 +118,21 @@ export class CryptoSession {
   async onAck(ackJson: string): Promise<void> {
     const subtleApi = requireSubtle();
     const ack = JSON.parse(ackJson) as { v: number; keyId: string; cNonce: string; sNonce: string; pub: string };
-    if (ack.v !== VERSION || ack.keyId !== this.config.keyId) {
-      throw new Error('ACK 版本/keyId 不符');
+    if (ack.v !== VERSION) {
+      throw new Error('ACK 版本不符');
     }
     if (!this.cNonce || ack.cNonce !== b64(this.cNonce)) {
       throw new Error('ACK cNonce 不符');
     }
+    const keyId = ack.keyId;
+    const spkiB64 = this.config.keys[keyId]
+      || (keyId === this.config.keyId ? this.config.serverSpkiB64 : '');
+    if (!spkiB64) {
+      throw new Error('ACK keyId 不在内置公钥集合');
+    }
 
     const serverStaticKey = await subtleApi.importKey(
-      'spki', unb64(this.config.serverSpkiB64), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+      'spki', unb64(spkiB64), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
     const serverEphKey = await subtleApi.importKey(
       'spki', unb64(ack.pub), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
 
@@ -157,16 +143,17 @@ export class CryptoSession {
     const ikm = concat(dhEs, dhEe);
 
     this.sNonce = unb64(ack.sNonce);
-    const transcriptInput = `im-msg-v1|v=${VERSION}|keyId=${this.config.keyId}|cnonce=${ack.cNonce}`
+    const transcriptInput = `im-msg-v1|v=${VERSION}|keyId=${keyId}|cnonce=${ack.cNonce}`
       + `|snonce=${ack.sNonce}|cpub=${b64(this.clientPubSpki!)}|spub=${ack.pub}`;
     this.transcript = await sha256(utf8(transcriptInput));
 
     const hkdfKey = await subtleApi.importKey('raw', ikm, 'HKDF', false, ['deriveKey']);
     const derive = (label: string) => subtleApi.deriveKey(
-      { name: 'HKDF', hash: 'SHA-256', salt: this.sNonce!, info: utf8(`im-msg-v1|${this.config.keyId}|${label}|${hex(this.transcript!)}`) },
+      { name: 'HKDF', hash: 'SHA-256', salt: this.sNonce!, info: utf8(`im-msg-v1|${keyId}|${label}|${hex(this.transcript!)}`) },
       hkdfKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
     this.c2sKey = await derive(DIR_C2S);
     this.s2cKey = await derive(DIR_S2C);
+    this.establishedKeyId = keyId;
 
     // 会话密钥已派生，释放临时私钥引用
     this.clientEphemeral = undefined;
@@ -198,7 +185,8 @@ export class CryptoSession {
     const seq = this.sendSeq;
     const iv = nonceFor(this.cNonce, seq);
     const ts = message.timestamp ?? Date.now();
-    const aad = utf8(aadStr(VERSION, this.config.keyId, DIR_C2S, seq, message.type,
+    const keyId = this.establishedKeyId ?? this.config.keyId;
+    const aad = utf8(aadStr(VERSION, keyId, DIR_C2S, seq, message.type,
       message.id, message.from, message.to, message.group, ts));
     const plaintext = utf8(JSON.stringify({ content: message.content, headers: message.headers ?? {} }));
     const ct = new Uint8Array(await requireSubtle().encrypt(
@@ -215,7 +203,7 @@ export class CryptoSession {
       headers: {
         enc: '1',
         cv: String(VERSION),
-        ckid: this.config.keyId,
+        ckid: keyId,
         civ: b64(iv),
         cseq: String(seq),
       },
@@ -226,17 +214,18 @@ export class CryptoSession {
   async decrypt(wire: WireMessage): Promise<ChatMessage> {
     if (!this.s2cKey) throw new Error('会话密钥未就绪');
     if (!wire.headers || wire.headers.enc !== '1') throw new Error('未加密帧');
-    if (Number(wire.headers.cv) !== VERSION || wire.headers.ckid !== this.config.keyId) {
+    const keyId = this.establishedKeyId ?? this.config.keyId;
+    if (Number(wire.headers.cv) !== VERSION || wire.headers.ckid !== keyId) {
       throw new Error('版本或密钥标识不符');
     }
     const seq = Number(wire.headers.cseq);
     if (!Number.isInteger(seq) || seq !== this.recvSeq) throw new Error('cseq 不连续');
-    const aad = utf8(aadStr(VERSION, this.config.keyId, DIR_S2C, seq, wire.type,
+    const aad = utf8(aadStr(VERSION, keyId, DIR_S2C, seq, wire.type,
       wire.id, wire.from, wire.to, wire.group, wire.timestamp ?? 0));
     const plaintext = new Uint8Array(await requireSubtle().decrypt(
       { name: 'AES-GCM', iv: unb64(wire.headers.civ), additionalData: aad }, this.s2cKey, unb64(wire.content)));
     this.recvSeq++;
-    const decoded = JSON.parse(textDecoder.decode(plaintext)) as { content: string; headers?: Record<string, string> };
+    const decoded = JSON.parse(utf8Decode(plaintext)) as { content: string; headers?: Record<string, string> };
     return {
       id: wire.id,
       type: wire.type,

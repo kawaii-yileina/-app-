@@ -86,10 +86,24 @@ class WebSocketService {
   }
 
   connect(token: string) {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    const existing = this.ws;
+    if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+      // 已有连接：token 未变则直接复用，避免重复建连；token 变化（续期）才重建
+      if (this.lastToken === token) return;
+      this.manualClose = true;
+      existing.onclose = null;
+      existing.onerror = null;
+      existing.close();
+    }
     this.manualClose = false;
     this.lastToken = token;
     this.ensureNetworkListeners();
-    const base = import.meta.env.VITE_WS_URL || 'ws://localhost:9100';
+    const rawBase = import.meta.env.VITE_WS_URL || 'ws://localhost:9100/ws/api/';
+    const base = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
     const deviceId = encodeURIComponent(`${getOrCreateDeviceId()}-${getTabId()}`);
     const wsUrl = `${base}?token=${token}&deviceId=${deviceId}&deviceType=web`;
 
@@ -111,9 +125,12 @@ class WebSocketService {
     this.handshakeChain = Promise.resolve();
     this.clearHandshakeTimer();
 
-    this.ws = new WebSocket(wsUrl);
+    console.log('WebSocket connecting:', base);
+    const socket = new WebSocket(wsUrl);
+    this.ws = socket;
 
-    this.ws.onopen = () => {
+    socket.onopen = () => {
+      if (this.ws !== socket) return;
       console.log('WebSocket connected');
       this.reconnectAttempts = 0;
       if (this.cryptoState === 'handshaking' && this.crypto) {
@@ -127,12 +144,16 @@ class WebSocketService {
       }
     };
 
-    this.ws.onmessage = (event) => {
+    socket.onmessage = (event) => {
+      if (this.ws !== socket) return;
       this.handleMessage(event.data);
     };
 
-    this.ws.onclose = () => {
-      console.log('WebSocket disconnected');
+    socket.onclose = (event) => {
+      if (this.ws !== socket) return;
+      console.log(
+        `WebSocket disconnected code=${event.code} reason=${event.reason || '-'} clean=${event.wasClean}`
+      );
       this.stopHeartbeat();
       this.clearHandshakeTimer();
       if (this.manualClose) return;
@@ -148,7 +169,8 @@ class WebSocketService {
       this.tryReconnect(token);
     };
 
-    this.ws.onerror = (error) => {
+    socket.onerror = (error) => {
+      if (this.ws !== socket) return;
       console.error('WebSocket error:', error);
     };
   }
@@ -299,6 +321,7 @@ class WebSocketService {
       this.rawSend({ type: 'CRYPTO_CONFIRM', content: clientConfirm });
       this.crypto!.markReady();
       this.cryptoState = 'ready';
+      console.log('crypto handshake established');
       this.onReady();
     } catch (e) {
       console.error('crypto CONFIRM handling failed:', e);
@@ -333,6 +356,9 @@ class WebSocketService {
   }
 
   private tryReconnect(token: string) {
+    if (this.reconnectTimer) return;
+    const state = this.ws?.readyState;
+    if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) return;
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectTimer = setTimeout(() => {
         this.reconnectAttempts++;

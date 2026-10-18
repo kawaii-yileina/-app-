@@ -114,66 +114,288 @@
 }
 
 .imageLoading {
-  width: 120px;
+  width: 160px;
   height: 120px;
   border-radius: 6px;
   margin-bottom: 4px;
   background: var(--c-surface-2);
 }
 
-.video {
-  max-width: 250px;
-  border-radius: 6px;
-  display: block;
-}
-
 .videoWrapper {
   position: relative;
-  max-width: 250px;
-  border-radius: 6px;
+  border-radius: var(--c-radius-sm);
   overflow: hidden;
-  cursor: pointer;
   background: #000;
-}
-
-.videoWrapper .video {
+  line-height: 0;
   max-width: 100%;
+}
+
+.videoCover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   display: block;
+  pointer-events: none;
 }
 
-.videoPlaceholder {
-  width: 220px;
-  height: 160px;
+.videoEl {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
   background: #000;
+  cursor: pointer;
 }
 
-.videoOverlay {
+.videoPreviewHit {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.playBtn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  color: #1b1d21;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+
+.playBtn svg {
+  margin-left: 2px;
+}
+
+.videoLoader,
+.videoError {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.3);
+  padding: 0 12px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: var(--c-font-xs);
+  line-height: 1.4;
+  text-align: center;
   pointer-events: none;
-  transition: opacity 0.2s;
 }
 
-.videoPlaying .videoOverlay {
-  opacity: 0;
+.videoMeta {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  pointer-events: none;
 }
 
-.playBtn {
-  width: 48px;
-  height: 48px;
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 50%;
+.videoPill {
+  max-width: 48%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: var(--c-radius-full);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: var(--c-font-xs);
+  line-height: 1.5;
+}
+
+.videoDuration {
+  margin-left: auto;
+}
+
+.videoMaxBtn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--c-radius-full);
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-  color: #333;
-  padding-left: 3px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+}
+
+.videoToggle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.videoToggle svg {
+  margin-left: 2px;
+}
+
+.videoBarWrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  cursor: pointer;
+}
+
+.videoTrack {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.4);
+  overflow: hidden;
+}
+
+.videoFill {
+  height: 100%;
+  background: #fff;
+}
+
+.playerOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.playerVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.playerClose {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  right: 12px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.playerToggle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.playerToggle svg {
+  margin-left: 3px;
+}
+
+.playerControls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.playerPlay {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.playerTime {
+  flex: none;
+  font-size: var(--c-font-xs);
+  color: rgba(255, 255, 255, 0.85);
+  font-variant-numeric: tabular-nums;
+}
+
+.playerBarWrap {
+  flex: 1;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.playerTrack {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.3);
+  overflow: hidden;
+}
+
+.playerFill {
+  height: 100%;
+  background: var(--c-primary);
 }
 
 .fileCard {
