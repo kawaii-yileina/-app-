@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../../store/useChatStore';
 import { useContactStore } from '../../../store/useContactStore';
 import { useOnlineStore } from '../../../store/useOnlineStore';
-import { AI_ASSISTANT } from '../../../types';
+import { AI_ASSISTANT, SYSTEM_ACCOUNT } from '../../../types';
 import { formatConversationPreview } from '../../../utils/messagePreview';
 import { aiApi, messageApi } from '../../../api';
 import { createSession, getModels, type HermesModel } from '../../../api/hermes';
@@ -56,6 +56,9 @@ const ChatList = () => {
   const pullProps = usePullRefresh(refreshAll);
 
   const getTargetInfo = (targetId: string, chatType: number) => {
+    if (targetId === String(SYSTEM_ACCOUNT.ID)) {
+      return { name: t('chat.systemNotice'), avatar: SYSTEM_ACCOUNT.AVATAR, isOnline: false, isAi: false, memberAvatars: undefined };
+    }
     if (targetId === String(AI_ASSISTANT.ID)) {
       return { name: AI_ASSISTANT.NAME, avatar: AI_ASSISTANT.AVATAR, isOnline: true, isAi: true, memberAvatars: undefined };
     }

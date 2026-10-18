@@ -11,6 +11,7 @@ interface AuthState {
   setAuth: (token: string, refreshToken: string, user: User) => void;
   updateTokens: (token: string, refreshToken?: string) => void;
   logout: () => void;
+  forceLocalLogout: () => void;
   updateUser: (user: Partial<User>) => void;
   restoreUser: (token: string) => Promise<void>;
 }
@@ -48,6 +49,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const refreshToken = localStorage.getItem('refreshToken') || undefined;
     const userId = get().user?.userId;
     authApi.logout(refreshToken).catch(() => {});
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    resetChatState();
+    disposeChatCache();
+    if (userId) void clearChatCache(String(userId));
+    set({ token: null, user: null, isAuthenticated: false });
+  },
+  forceLocalLogout: () => {
+    const userId = get().user?.userId;
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');

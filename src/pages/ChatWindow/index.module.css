@@ -729,6 +729,15 @@
   border-top: 1px solid var(--c-divider);
 }
 
+.systemBanner {
+  padding: 12px 16px;
+  text-align: center;
+  font-size: var(--c-font-sm);
+  color: var(--c-text-muted);
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-divider);
+}
+
 .downloadBtn {
   position: fixed;
   bottom: 80px;

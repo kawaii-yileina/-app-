@@ -1,4 +1,5 @@
 import { Toast } from 'antd-mobile';
+import { Capacitor } from '@capacitor/core';
 import i18n from '../i18n';
 import { authApi } from '../api';
 import type { ChatMessage } from '../types';
@@ -139,7 +140,9 @@ class WebSocketService {
       if (res.code !== 200 || !res.data?.ticket) {
         throw new Error(res.message || 'WS_TICKET_FAILED');
       }
-      const wsUrl = `${base}?ticket=${encodeURIComponent(res.data.ticket)}&deviceId=${deviceId}&deviceType=web`;
+      const platform = Capacitor.getPlatform();
+      const deviceType = platform === 'android' || platform === 'ios' ? 'mobile' : 'desktop';
+      const wsUrl = `${base}?ticket=${encodeURIComponent(res.data.ticket)}&deviceId=${deviceId}&deviceType=${deviceType}&platform=${encodeURIComponent(platform)}`;
       const previous = this.ws;
       const socket = new WebSocket(wsUrl);
       if (previous && previous !== socket) {

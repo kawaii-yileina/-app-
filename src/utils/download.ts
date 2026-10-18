@@ -36,7 +36,7 @@ export const downloadFile = async (url: string, filename?: string): Promise<bool
       // 原生：写入应用外部存储 Download/IM
       const base64 = await blobToBase64(blob);
       await Filesystem.writeFile({
-        path: `Download/IM/${name}`,
+        path: `Download/Murmur/${name}`,
         data: base64,
         directory: Directory.ExternalStorage,
         recursive: true,

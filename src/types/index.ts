@@ -181,6 +181,7 @@ export const SystemEventType = {
   GROUP_ADMIN_UNSET: 'group_admin_unset',
   MESSAGE_RECALL: 'message_recall',
   CONVERSATION_CHANGED: 'conversation_changed',
+  SESSION_KICKED: 'session_kicked',
   RATE_LIMITED: 'rate_limited',
 } as const;
 
@@ -247,5 +248,11 @@ export interface UserAiConfig {
 export const AI_ASSISTANT = {
   ID: 0,
   NAME: 'AI 助手',
+  AVATAR: '',
+} as const;
+
+export const SYSTEM_ACCOUNT = {
+  ID: -1,
+  NAME: '系统通知',
   AVATAR: '',
 } as const;

@@ -34,7 +34,7 @@ import { startRecording, stopRecording, cancelRecording, isRecordingSupported, i
 import MessageBubble from '../../components/MessageBubble';
 import SharedAvatar from '../../components/SharedAvatar';
 import type { Message, ChatMessage, GroupMember, MentionInfo, EmojiSticker } from '../../types';
-import { AI_ASSISTANT } from '../../types';
+import { AI_ASSISTANT, SYSTEM_ACCOUNT } from '../../types';
 import { useBackGuard } from '../../hooks/useBackGuard';
 import styles from './index.module.css';
 import callManager from '../../services/call';
@@ -59,6 +59,7 @@ const ChatWindow = () => {
   const aroundSeq = Number(searchParams.get('aroundSeq') || 0);
   const focusMsgId = searchParams.get('msgId') || '';
   const isAiChat = String(targetId) === String(AI_ASSISTANT.ID);
+  const isSystemChat = String(targetId) === String(SYSTEM_ACCOUNT.ID);
 
   const user = useAuthStore((s) => s.user);
   const messages = useChatStore((s) => s.messages);
@@ -146,7 +147,7 @@ const ChatWindow = () => {
   const conversationMessages = isAiChat ? aiMessages : (messages[conversationKey] || []);
   const [aroundActive, setAroundActive] = useState(aroundSeq > 0);
 
-  const targetFriend = !isAiChat && chatType === 0
+  const targetFriend = !isAiChat && !isSystemChat && chatType === 0
     ? friends.find((f) => f.userId === targetId)
     : undefined;
   const targetDeleted = !!targetFriend?.deleted;
@@ -417,6 +418,7 @@ const ChatWindow = () => {
 
   const getSenderAvatar = (senderId: string) => {
     if (senderId === String(AI_ASSISTANT.ID)) return '';
+    if (senderId === String(SYSTEM_ACCOUNT.ID)) return SYSTEM_ACCOUNT.AVATAR;
     if (senderId === user?.userId) return user.avatar || '';
     const member = groupMembers.find((m) => m.userId === senderId);
     if (member) return member.avatar || '';
@@ -426,6 +428,7 @@ const ChatWindow = () => {
 
   const getSenderNameFor = (senderId: string) => {
     if (senderId === String(AI_ASSISTANT.ID)) return AI_ASSISTANT.NAME;
+    if (senderId === String(SYSTEM_ACCOUNT.ID)) return SYSTEM_ACCOUNT.NAME;
     if (senderId === user?.userId) return user?.nickname || user?.username || '';
     const member = groupMembers.find((m) => m.userId === senderId);
     if (member) return member.nickname || member.username || '';
@@ -790,6 +793,7 @@ const ChatWindow = () => {
 
   const getChatTitle = () => {
     if (isAiChat) return aiSessionTitle || AI_ASSISTANT.NAME;
+    if (isSystemChat) return t('chat.systemNotice');
     if (chatType === 1) {
       const group = groups.find((g) => g.id === String(targetId));
       return group?.name || t('common.unknownGroup');
@@ -1033,7 +1037,7 @@ const ChatWindow = () => {
 
   /** 发送输入中状态（仅私聊），2s 节流，避免频繁推送 */
   const sendTyping = () => {
-    if (isAiChat || chatType !== 0 || !user || !targetId) return;
+    if (isAiChat || isSystemChat || chatType !== 0 || !user || !targetId) return;
     const now = Date.now();
     if (now - lastTypingSentRef.current < 2000) return;
     lastTypingSentRef.current = now;
@@ -1188,7 +1192,7 @@ const ChatWindow = () => {
     if (!isRecord) {
       menuActions.push({ key: 'copy', label: t('chat.copyMessage'), icon: <Copy size={18} strokeWidth={1.8} />, onClick: handleCopyMessage });
     }
-    if (!isAiChat && !isRecord) {
+    if (!isAiChat && !isSystemChat && !isRecord) {
       menuActions.push({ key: 'quote', label: t('chat.quote'), icon: <Quote size={18} strokeWidth={1.8} />, onClick: handleQuoteMessage });
       menuActions.push({ key: 'forward', label: t('chat.forward'), icon: <Forward size={18} strokeWidth={1.8} />, onClick: handleForwardMessage });
     }
@@ -1300,7 +1304,7 @@ const ChatWindow = () => {
                 senderAvatar={getSenderAvatar(ownerId)}
                 showSenderName={chatType === 1}
                 onCallRecord={msg.msgType === 'CALL' ? (media) => startCall(media) : undefined}
-                onAvatarClick={ownerId !== String(AI_ASSISTANT.ID) && ownerId !== user?.userId
+                onAvatarClick={ownerId !== String(AI_ASSISTANT.ID) && ownerId !== String(SYSTEM_ACCOUNT.ID) && ownerId !== user?.userId
                   ? () => navigate(`/contacts/${ownerId}`)
                   : undefined}
                 onAvatarLongPress={chatType === 1 && !isAiChat && ownerId !== String(user?.userId)
@@ -1374,7 +1378,11 @@ const ChatWindow = () => {
         <div className={styles.deletedBanner}>{t('chat.userDeleted')}</div>
       )}
 
-      <div className={styles.inputArea} style={targetDeleted ? { display: 'none' } : undefined}>
+      {isSystemChat && (
+        <div className={styles.systemBanner}>{t('chat.systemReadOnly')}</div>
+      )}
+
+      <div className={styles.inputArea} style={targetDeleted || isSystemChat ? { display: 'none' } : undefined}>
         {quotingMessage && (
           <div className={styles.quoteBar}>
             <div className={styles.quoteBarContent}>

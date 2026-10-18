@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
-import { ConfigProvider, Toast } from 'antd-mobile';
+import { ConfigProvider, Dialog, Toast } from 'antd-mobile';
 import zhCN from 'antd-mobile/es/locales/zh-CN';
 import { useTranslation } from 'react-i18next';
 import { App as CapApp } from '@capacitor/app';
@@ -17,7 +17,7 @@ import { startChatCache } from './services/chatCache';
 import CallOverlay from './components/CallOverlay';
 import type { ChatMessage, Message } from './types';
 import { CALL_SIGNAL_TYPES } from './types/call';
-import { SystemEventType, parseSystemEventType } from './types';
+import { SYSTEM_ACCOUNT, SystemEventType, parseSystemEventType } from './types';
 import { truncatePreview, parseReplyInfo, parseMentions, toFiniteNumber } from './utils/messagePreview';
 import Login from './pages/Login';
 import ResetPassword from './pages/Login/ResetPassword';
@@ -296,6 +296,15 @@ const WebSocketProvider = () => {
             });
             break;
           }
+          case SystemEventType.SESSION_KICKED: {
+            wsService.disconnect();
+            useAuthStore.getState().forceLocalLogout();
+            void Dialog.alert({
+              content: t('auth.kicked'),
+              confirmText: t('common.confirm'),
+            });
+            break;
+          }
           case SystemEventType.RATE_LIMITED: {
             // 发送频率超限：后端已阻断该消息，本地置失败并提示
             const rateLimitedClientMsgId = headers.clientMsgId || '';
@@ -340,7 +349,7 @@ const WebSocketProvider = () => {
           );
         }
 
-        if (!isMine && !isAi) {
+        if (!isMine && !isAi && targetId !== String(SYSTEM_ACCOUNT.ID)) {
           if ('Notification' in window && Notification.permission === 'granted') {
             new Notification(t('common.newMessage'), { body: message.content, icon: '/vite.svg' });
           }

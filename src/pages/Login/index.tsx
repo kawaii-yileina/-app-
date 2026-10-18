@@ -106,7 +106,7 @@ const Login = () => {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <div className={styles.logo}>IM</div>
+        <div className={styles.logo}>M</div>
         <h1 className={styles.title}>{t('auth.title')}</h1>
         <p className={styles.subtitle}>{isLogin ? t('auth.login') : t('auth.register')}</p>
       </div>
