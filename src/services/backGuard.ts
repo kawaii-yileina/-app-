@@ -49,6 +49,7 @@ function releaseSentinel() {
 function onPopState() {
   if (suppressPop > 0) {
     suppressPop -= 1;
+    sentinelActive = false;
     const finishedRelease = pendingRelease;
     pendingRelease = false;
     if (finishedRelease && stack.length > 0 && needSentinelAfterPop) {
@@ -58,14 +59,14 @@ function onPopState() {
     needSentinelAfterPop = false;
     return;
   }
-  if (stack.length === 0) return;
-  stack[stack.length - 1].handler();
-  if (stack.length > 0) {
-    window.history.pushState(stateWithSentinel(), '');
-    sentinelActive = true;
-  } else {
+  if (stack.length === 0) {
     sentinelActive = false;
+    return;
   }
+  // 用户返回已经消耗掉哨兵；先关闭浮层，绝不能再补哨兵。
+  // 若仍有下层浮层，由 pushBackGuard 的 cleanup 负责重新压栈。
+  sentinelActive = false;
+  stack[stack.length - 1].handler();
 }
 
 /** 安装浏览器 popstate 监听；可重复调用，返回卸载函数 */
@@ -87,7 +88,12 @@ export function pushBackGuard(handler: Handler): () => void {
   return () => {
     const index = stack.findIndex((item) => item.id === entry.id);
     if (index >= 0) stack.splice(index, 1);
-    if (stack.length === 0) releaseSentinel();
+    if (stack.length > 0) {
+      // 关闭最上层后仍有浮层时，重新保证返回拦截
+      ensureSentinel();
+    } else {
+      releaseSentinel();
+    }
   };
 }
 
