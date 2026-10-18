@@ -39,6 +39,16 @@ import SelectTarget from './pages/Chat/SelectTarget';
 import SearchPage from './pages/Search';
 import { installBackGuard, runBackGuard } from './services/backGuard';
 
+const isVisibleElement = (el: HTMLElement): boolean => {
+  const style = window.getComputedStyle(el);
+  const rect = el.getBoundingClientRect();
+  return style.display !== 'none'
+    && style.visibility !== 'hidden'
+    && Number(style.opacity) > 0
+    && rect.width > 0
+    && rect.height > 0;
+};
+
 const BackButtonHandler = () => {
   const { t } = useTranslation();
   useEffect(() => {
@@ -50,13 +60,14 @@ const BackButtonHandler = () => {
 
       // antd-mobile 浮层兜底：优先点关闭按钮，其次点击最上层遮罩
       const closeButton = document.querySelector('.adm-image-viewer-close') as HTMLElement | null;
-      if (closeButton) {
+      if (closeButton && isVisibleElement(closeButton)) {
         closeButton.click();
         return;
       }
-      const masks = document.querySelectorAll('.adm-mask');
+      const masks = Array.from(document.querySelectorAll<HTMLElement>('.adm-mask'))
+        .filter(isVisibleElement);
       if (masks.length > 0) {
-        (masks[masks.length - 1] as HTMLElement).click();
+        masks[masks.length - 1].click();
         return;
       }
 
