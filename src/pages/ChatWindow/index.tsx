@@ -868,11 +868,6 @@ const ChatWindow = () => {
           msgType: 'RECALL',
           content: '',
         });
-        // 撤回可能改变会话预览，以后端为准刷新列表
-        const convRes = await messageApi.getConversations();
-        if (convRes.code === 200) {
-          useChatStore.getState().setConversations(convRes.data);
-        }
       } else {
         Toast.show({ content: res.message || t('chat.recallFailed') });
       }

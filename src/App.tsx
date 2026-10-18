@@ -267,10 +267,33 @@ const WebSocketProvider = () => {
                 }
               }
             }
-            // 撤回可能改变会话预览（last_msg_content），以后端为准刷新列表
-            messageApi.getConversations().then(res => {
-              if (res.code === 200) setConversations(res.data);
-            }).catch(() => {});
+            break;
+          }
+          case SystemEventType.CONVERSATION_CHANGED: {
+            const targetId = headers.targetId || content.split(':')[1] || '';
+            const chatTypeRaw = headers.chatType ?? content.split(':')[2];
+            const chatType = Number(chatTypeRaw);
+            const action = headers.action || content.split(':')[3] || 'UPSERT';
+            if (!targetId || targetId === '0' || chatTypeRaw == null || chatTypeRaw === ''
+                || !Number.isFinite(chatType)) break;
+            const key = `${targetId}_${chatType}`;
+            if (action === 'DELETE') {
+              useChatStore.getState().removeConversation(
+                key, Number(headers.lastMsgTimeMs) || undefined);
+              break;
+            }
+            useChatStore.getState().upsertConversation({
+              id: headers.id || '',
+              userId: String(user?.userId || ''),
+              targetId,
+              chatType,
+              lastMsgContent: headers.lastMsgContent || '',
+              lastMsgTime: headers.lastMsgTime || new Date().toISOString(),
+              lastMsgTimeMs: Number(headers.lastMsgTimeMs) || undefined,
+              lastMsgId: headers.lastMsgId || undefined,
+              unreadCount: Number(headers.unreadCount) || 0,
+              mentioned: Number(headers.mentioned) || 0,
+            });
             break;
           }
           case SystemEventType.RATE_LIMITED: {
@@ -312,7 +335,8 @@ const WebSocketProvider = () => {
             key,
             truncatePreview(message.content || '', message.type, message.headers),
             new Date().toISOString(),
-            !isMine
+            !isMine,
+            message.id
           );
         }
 
@@ -331,10 +355,8 @@ const WebSocketProvider = () => {
       const convs = state.conversations
         .map((c) => ({ targetId: c.targetId, chatType: c.chatType }))
         .filter((c) => (state.syncCursors[`${c.targetId}_${c.chatType}`] || 0) > 0);
-      if (convs.length === 0) {
-        return;
-      }
-      syncConversations(convs).finally(() => {
+      const sync = convs.length > 0 ? syncConversations(convs) : Promise.resolve();
+      sync.finally(() => {
         messageApi
           .getConversations()
           .then((res) => {

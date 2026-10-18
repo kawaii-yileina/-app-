@@ -99,6 +99,7 @@ function resetChatState() {
     syncCursors: {},
     typing: {},
     pendingTimers: new Map(),
+    conversationDeletedAt: {},
     hydrated: false,
     initialLoading: true,
   });

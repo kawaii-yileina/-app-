@@ -11,6 +11,8 @@ interface ChatState {
   typing: Record<string, number>;
   /** 各会话增量同步游标：conversationKey → 已拉取的最大 seq */
   syncCursors: Record<string, number>;
+  /** 会话删除时间，用于丢弃晚到的旧快照 */
+  conversationDeletedAt: Record<string, number>;
   /** 本地缓存是否已恢复 */
   hydrated: boolean;
   /** 首次会话列表请求是否仍在进行 */
@@ -24,9 +26,10 @@ interface ChatState {
   setMessages: (key: string, messages: Message[]) => void;
   updateMessage: (key: string, msgId: string, patch: Partial<Message>) => void;
   removeMessage: (key: string, msgId: string) => void;
-  updateConversation: (key: string, lastMsg: string, time: string, increaseUnread: boolean) => void;
+  updateConversation: (key: string, lastMsg: string, time: string, increaseUnread: boolean, lastMsgId?: string) => void;
+  upsertConversation: (conversation: Conversation) => void;
   clearUnread: (key: string) => void;
-  removeConversation: (key: string) => void;
+  removeConversation: (key: string, deletedAtMs?: number) => void;
   /** 提升（取较大值）会话同步游标 */
   setSyncCursor: (key: string, seq: number) => void;
   /** 合并增量同步消息：按 msgId 去重、有 seq 者按 seq 升序，并提升游标 */
@@ -48,6 +51,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   pendingTimers: new Map(),
   typing: {},
   syncCursors: {},
+  conversationDeletedAt: {},
   hydrated: false,
   initialLoading: true,
   setHydrated: (hydrated) => set({ hydrated }),
@@ -89,7 +93,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         [key]: (state.messages[key] || []).filter((m) => m.msgId !== msgId),
       },
     })),
-  updateConversation: (key, lastMsg, time, increaseUnread) =>
+  updateConversation: (key, lastMsg, time, increaseUnread, lastMsgId) =>
     set((state) => {
       const idx = state.conversations.findIndex(
         (c) => `${c.targetId}_${c.chatType}` === key
@@ -103,19 +107,52 @@ export const useChatStore = create<ChatState>((set, get) => ({
           chatType: Number(chatTypeStr),
           lastMsgContent: lastMsg,
           lastMsgTime: time,
+          lastMsgId,
           unreadCount: increaseUnread ? 1 : 0,
         };
         return { conversations: [conv, ...state.conversations] };
       }
+      const current = state.conversations[idx];
+      const sameMessage = Boolean(lastMsgId && current.lastMsgId === lastMsgId);
       const updated = {
-        ...state.conversations[idx],
+        ...current,
         lastMsgContent: lastMsg,
         lastMsgTime: time,
-        unreadCount: increaseUnread ? state.conversations[idx].unreadCount + 1 : state.conversations[idx].unreadCount,
+        lastMsgId: lastMsgId ?? current.lastMsgId,
+        unreadCount: increaseUnread && !sameMessage ? current.unreadCount + 1 : current.unreadCount,
       };
       const conversations = state.conversations.filter((_, i) => i !== idx);
       conversations.unshift(updated);
       return { conversations };
+    }),
+  upsertConversation: (conversation) =>
+    set((state) => {
+      const key = `${conversation.targetId}_${conversation.chatType}`;
+      const incomingTime = conversation.lastMsgTimeMs ?? Date.parse(conversation.lastMsgTime);
+      const deletedAt = state.conversationDeletedAt[key];
+      if (deletedAt && Number.isFinite(incomingTime) && incomingTime <= deletedAt) {
+        return state;
+      }
+      const existing = state.conversations.find(
+        (c) => c.targetId === conversation.targetId && c.chatType === conversation.chatType
+      );
+      const existingTime = existing
+        ? (existing.lastMsgTimeMs ?? Date.parse(existing.lastMsgTime))
+        : NaN;
+      if (Number.isFinite(incomingTime) && Number.isFinite(existingTime) && incomingTime < existingTime) {
+        return state;
+      }
+      const conversationDeletedAt = { ...state.conversationDeletedAt };
+      delete conversationDeletedAt[key];
+      return {
+        conversationDeletedAt,
+        conversations: [
+          conversation,
+          ...state.conversations.filter(
+            (c) => !(c.targetId === conversation.targetId && c.chatType === conversation.chatType)
+          ),
+        ],
+      };
     }),
   clearUnread: (key) =>
     set((state) => ({
@@ -125,8 +162,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
           : c
       ),
     })),
-  removeConversation: (key) =>
+  removeConversation: (key, deletedAtMs) =>
     set((state) => {
+      const deleteTime = deletedAtMs && Number.isFinite(deletedAtMs) ? deletedAtMs : null;
+      const existing = state.conversations.find(
+        (c) => `${c.targetId}_${c.chatType}` === key
+      );
+      const existingTime = existing
+        ? (existing.lastMsgTimeMs ?? Date.parse(existing.lastMsgTime))
+        : NaN;
+      if (deleteTime && Number.isFinite(existingTime) && existingTime > deleteTime) {
+        return state;
+      }
       const messages = { ...state.messages };
       delete messages[key];
       const syncCursors = { ...state.syncCursors };
@@ -137,6 +184,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         conversations: state.conversations.filter(
           (c) => `${c.targetId}_${c.chatType}` !== key
         ),
+        conversationDeletedAt: deleteTime
+          ? { ...state.conversationDeletedAt, [key]: deleteTime }
+          : state.conversationDeletedAt,
         messages,
         syncCursors,
         typing,

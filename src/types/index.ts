@@ -140,6 +140,8 @@ export interface Conversation {
   chatType: number;
   lastMsgContent: string;
   lastMsgTime: string;
+  lastMsgTimeMs?: number;
+  lastMsgId?: string;
   unreadCount: number;
   /** 是否有人 @ 我（1 为是） */
   mentioned?: number;
@@ -172,6 +174,7 @@ export const SystemEventType = {
   GROUP_ADMIN_SET: 'group_admin_set',
   GROUP_ADMIN_UNSET: 'group_admin_unset',
   MESSAGE_RECALL: 'message_recall',
+  CONVERSATION_CHANGED: 'conversation_changed',
   RATE_LIMITED: 'rate_limited',
 } as const;
 
