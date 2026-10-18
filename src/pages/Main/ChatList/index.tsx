@@ -11,6 +11,7 @@ import { aiApi, messageApi } from '../../../api';
 import { createSession, getModels, type HermesModel } from '../../../api/hermes';
 import type { Conversation } from '../../../types';
 import SharedAvatar from '../../../components/SharedAvatar';
+import GroupAvatar from '../../../components/GroupAvatar';
 import { refreshAll } from '../../../services/refresh';
 import { usePullRefresh } from '../../../hooks/usePullRefresh';
 import { useBackGuard } from '../../../hooks/useBackGuard';
@@ -56,15 +57,15 @@ const ChatList = () => {
 
   const getTargetInfo = (targetId: string, chatType: number) => {
     if (targetId === String(AI_ASSISTANT.ID)) {
-      return { name: AI_ASSISTANT.NAME, avatar: AI_ASSISTANT.AVATAR, isOnline: true, isAi: true };
+      return { name: AI_ASSISTANT.NAME, avatar: AI_ASSISTANT.AVATAR, isOnline: true, isAi: true, memberAvatars: undefined };
     }
     if (chatType === 1) {
       const group = groups.find((g) => g.id === targetId);
-      return { name: group?.name || t('common.unknownGroup'), avatar: group?.avatar, isOnline: false, isAi: false };
+      return { name: group?.name || t('common.unknownGroup'), avatar: group?.avatar, isOnline: false, isAi: false, memberAvatars: group?.memberAvatars };
     }
     const friend = friends.find((f) => f.userId === targetId);
     const isOnline = onlineUsers.has(String(targetId));
-    return { name: friend?.nickname || friend?.username || t('common.unknown'), avatar: friend?.avatar, isOnline, isAi: false };
+    return { name: friend?.nickname || friend?.username || t('common.unknown'), avatar: friend?.avatar, isOnline, isAi: false, memberAvatars: undefined };
   };
 
   const handleConversationClick = (targetId: string, chatType: number) => {
@@ -251,7 +252,11 @@ const ChatList = () => {
                     </div>
                   ) : (
                     <>
-                      <SharedAvatar name={info.name} src={info.avatar} size={52} />
+                      {conv.chatType === 1 ? (
+                        <GroupAvatar name={info.name} avatar={info.avatar} members={info.memberAvatars} size={52} />
+                      ) : (
+                        <SharedAvatar name={info.name} src={info.avatar} size={52} />
+                      )}
                       {conv.chatType === 0 && info.isOnline && (
                         <div className={styles.onlineDot} />
                       )}

@@ -5,6 +5,7 @@ import { ChevronRight, Crown, ShieldCheck, UserPlus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { contactApi } from '../../../api';
 import { useAuthStore } from '../../../store/useAuthStore';
+import GroupAvatar from '../../../components/GroupAvatar';
 import { avatarTint } from '../../../utils/avatarColor';
 import { useBackGuard } from '../../../hooks/useBackGuard';
 import type { Group, GroupMember } from '../../../types';
@@ -314,9 +315,12 @@ const GroupDetail = () => {
       {group && (
         <>
           <div className={styles.card}>
-            <div className={styles.avatar} style={{ background: avatarTint(group.name || '') }}>
-              {group.name?.charAt(0)}
-            </div>
+            <GroupAvatar
+              name={group.name}
+              avatar={group.avatar}
+              members={group.memberAvatars?.length ? group.memberAvatars : members.slice(0, 9).map((m) => ({ nickname: m.nickname, avatar: m.avatar }))}
+              size={72}
+            />
             <div className={styles.groupName}>{group.name}</div>
             <div className={styles.memberCount}>{members.length} {t('contacts.members')}</div>
             {myRole > 0 && <RoleBadge role={myRole} />}

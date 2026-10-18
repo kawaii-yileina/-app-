@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SpinLoading } from 'antd-mobile';
 import {
@@ -8,6 +8,8 @@ import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
 import { searchApi } from '../../api';
 import SharedAvatar from '../../components/SharedAvatar';
+import GroupAvatar from '../../components/GroupAvatar';
+import { useContactStore } from '../../store/useContactStore';
 import type {
   SearchCategory,
   SearchContactItem,
@@ -51,6 +53,7 @@ const loadTypes = (groupId: string | null): Set<TypeKey> => {
 const SearchPage = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const groups = useContactStore((s) => s.groups);
   const [searchParams] = useSearchParams();
   const groupId = searchParams.get('groupId');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -207,20 +210,23 @@ const SearchPage = () => {
     </button>
   );
 
-  const renderGroup = (item: SearchGroupItem) => (
-    <button
-      key={`group-${item.id}`}
-      className={styles.row}
-      onClick={() => openResult(() => navigate(`/chat/${item.id}?type=1`))}
-    >
-      <SharedAvatar name={item.name} src={item.avatar} size={42} />
-      <span className={styles.rowMain}>
-        <span className={styles.rowTitle}>{highlight(item.name)}</span>
-        <span className={styles.rowSub}>{t('search.groups')}</span>
-      </span>
-      <ChevronRight size={16} strokeWidth={1.8} className={styles.chevron} />
-    </button>
-  );
+  const renderGroup = (item: SearchGroupItem) => {
+    const group = groups.find((g) => g.id === item.id);
+    return (
+      <button
+        key={`group-${item.id}`}
+        className={styles.row}
+        onClick={() => openResult(() => navigate(`/chat/${item.id}?type=1`))}
+      >
+        <GroupAvatar name={item.name} avatar={item.avatar} members={group?.memberAvatars} size={42} />
+        <span className={styles.rowMain}>
+          <span className={styles.rowTitle}>{highlight(item.name)}</span>
+          <span className={styles.rowSub}>{t('search.groups')}</span>
+        </span>
+        <ChevronRight size={16} strokeWidth={1.8} className={styles.chevron} />
+      </button>
+    );
+  };
 
   const renderMember = (item: SearchMemberItem) => (
     <button

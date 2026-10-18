@@ -75,11 +75,17 @@ export interface FriendRequestItem {
   createdAt: string;
 }
 
+export interface GroupMemberAvatar {
+  nickname: string;
+  avatar: string;
+}
+
 export interface Group {
   id: string;
   name: string;
   avatar: string;
   ownerId: string;
+  memberAvatars?: GroupMemberAvatar[];
 }
 
 export interface GroupMember {

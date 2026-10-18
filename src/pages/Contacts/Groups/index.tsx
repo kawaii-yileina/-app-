@@ -8,7 +8,7 @@ import { refreshGroups } from '../../../services/refresh';
 import { usePullRefresh } from '../../../hooks/usePullRefresh';
 import { useBackGuard } from '../../../hooks/useBackGuard';
 import { useContactStore } from '../../../store/useContactStore';
-import { avatarTint } from '../../../utils/avatarColor';
+import GroupAvatar from '../../../components/GroupAvatar';
 import type { Group } from '../../../types';
 import styles from './index.module.css';
 
@@ -67,7 +67,7 @@ const Groups = () => {
         ) : (
           groups.map((group) => (
             <div key={group.id} className={styles.item} onClick={() => handleGroupClick(group)}>
-              <div className={styles.avatar} style={{ background: avatarTint(group.name || '') }}>{group.name?.charAt(0)}</div>
+              <GroupAvatar name={group.name} avatar={group.avatar} members={group.memberAvatars} size={44} />
               <div className={styles.info}>
                 <span className={styles.name}>{group.name}</span>
               </div>
