@@ -62,6 +62,7 @@ const ChatWindow = () => {
 
   const user = useAuthStore((s) => s.user);
   const messages = useChatStore((s) => s.messages);
+  const hydrated = useChatStore((s) => s.hydrated);
   const addMessage = useChatStore((s) => s.addMessage);
   const updateConversation = useChatStore((s) => s.updateConversation);
   const friends = useContactStore((s) => s.friends);
@@ -88,6 +89,7 @@ const ChatWindow = () => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [imageViewerSrc, setImageViewerSrc] = useState('');
   const [imageViewerRaw, setImageViewerRaw] = useState('');
@@ -170,6 +172,7 @@ const ChatWindow = () => {
   }, [showEmoji, emojiTab]);
 
   useEffect(() => {
+    if (!hydrated) return;
     loadHistory();
     markAsRead();
     if (chatType === 1) {
@@ -184,7 +187,7 @@ const ChatWindow = () => {
         })
         .catch(() => {});
     }
-  }, [targetId, chatType, sessionId, aroundSeq]);
+  }, [targetId, chatType, sessionId, aroundSeq, hydrated]);
 
   useEffect(() => {
     if (aroundActive) return;
@@ -271,9 +274,13 @@ const ChatWindow = () => {
   };
 
   const loadHistory = async () => {
-    if (!targetId) return;
+    if (!targetId) {
+      setLoadingHistory(false);
+      return;
+    }
     setPage(1);
     setHasMore(true);
+    setLoadingHistory(true);
     try {
       if (isAiChat) {
         if (sessionId) {
@@ -316,6 +323,15 @@ const ChatWindow = () => {
           return;
         }
 
+        const cached = useChatStore.getState().messages[conversationKey] || [];
+        const cachedCursor = useChatStore.getState().syncCursors[conversationKey] || 0;
+        if (cached.length > 0 && cachedCursor > 0) {
+          setPage(Math.floor(cached.length / 20));
+          setHasMore(true);
+          syncConversation(targetId!, chatType).catch((e) => console.warn('sync on open failed:', targetId, e));
+          return;
+        }
+
         const res = await messageApi.getHistory(targetId!, chatType);
         if (res.code === 200) {
           const data = res.data || [];
@@ -332,6 +348,8 @@ const ChatWindow = () => {
     } catch (e) {
       console.error('Failed to load history:', e);
       setAroundActive(false);
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -349,7 +367,11 @@ const ChatWindow = () => {
         setPage(nextPage);
         if (older.length > 0) {
           const current = useChatStore.getState().messages[conversationKey] || [];
-          useChatStore.getState().setMessages(conversationKey, [...older, ...current]);
+          const seen = new Set(current.map((message) => message.msgId));
+          const uniqueOlder = older.filter((message) => !seen.has(message.msgId));
+          if (uniqueOlder.length > 0) {
+            useChatStore.getState().setMessages(conversationKey, [...uniqueOlder, ...current]);
+          }
           requestAnimationFrame(() => {
             if (listEl) {
               listEl.scrollTop = listEl.scrollHeight - prevScrollHeight;
@@ -1239,6 +1261,12 @@ const ChatWindow = () => {
       />
 
       <div className={styles.messageList} ref={messageListRef} onScroll={handleScroll}>
+        {loadingHistory && !isAiChat && conversationMessages.length === 0 && (
+          <div className={styles.loadingHistory}>
+            <SpinLoading color="primary" />
+            <span>{t('common.loading')}</span>
+          </div>
+        )}
         {loadingMore && (
           <div className={styles.loadingMore}>{t('common.loading')}</div>
         )}

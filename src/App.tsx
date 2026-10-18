@@ -13,6 +13,7 @@ import wsService from './services/websocket';
 import callManager from './services/call';
 import { useCallRingtone } from './hooks/useCallRingtone';
 import { syncConversations } from './services/messageSync';
+import { startChatCache } from './services/chatCache';
 import CallOverlay from './components/CallOverlay';
 import type { ChatMessage, Message } from './types';
 import { CALL_SIGNAL_TYPES } from './types/call';
@@ -156,11 +157,27 @@ const WebSocketProvider = () => {
 
   useEffect(() => {
     if (!token) return;
-    wsService.connect(token);
-    if (user?.userId) {
-      wsService.setUserId(String(user.userId));
-    }
-    loadInitialData(setConversations, setFriends, setGroups, setOnlineUsers);
+    let cancelled = false;
+    const bootstrap = async () => {
+      if (user?.userId) {
+        try {
+          await startChatCache(String(user.userId));
+        } catch (e) {
+          console.warn('Failed to start chat cache:', e);
+          useChatStore.getState().setHydrated(true);
+        }
+        if (cancelled) return;
+        wsService.setUserId(String(user.userId));
+      } else {
+        useChatStore.getState().setHydrated(true);
+      }
+      wsService.connect(token);
+      loadInitialData(setConversations, setFriends, setGroups, setOnlineUsers)
+        .finally(() => {
+          if (!cancelled) useChatStore.getState().setInitialLoading(false);
+        });
+    };
+    void bootstrap();
 
     const unsubscribe = wsService.onMessage((message: ChatMessage) => {
       // 音视频通话信令（瞬时）：交由通话管理器处理，不入会话消息
@@ -328,6 +345,7 @@ const WebSocketProvider = () => {
     });
 
     return () => {
+      cancelled = true;
       unsubscribe();
       unsubscribeOpen();
       wsService.disconnect();

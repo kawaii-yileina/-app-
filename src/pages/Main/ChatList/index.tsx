@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SearchBar, Badge, Toast, Button, SwipeAction, Popup, Picker, PullToRefresh } from 'antd-mobile';
+import { SearchBar, Badge, Toast, Button, SwipeAction, Popup, Picker, PullToRefresh, SpinLoading } from 'antd-mobile';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../../store/useChatStore';
 import { useContactStore } from '../../../store/useContactStore';
@@ -24,6 +24,7 @@ const ChatList = () => {
   const friends = useContactStore((s) => s.friends);
   const groups = useContactStore((s) => s.groups);
   const onlineUsers = useOnlineStore((s) => s.onlineUsers);
+  const initialLoading = useChatStore((s) => s.initialLoading);
   const [aiSessions, setAiSessions] = useState<{ sessionId: string; title: string | null }[]>([]);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [sessionTitle, setSessionTitle] = useState('');
@@ -214,6 +215,13 @@ const ChatList = () => {
         {sortedConversations.length > 0 && (
           <div className={styles.sectionHeader}>
             <span className={styles.sectionTitle}>{t('chat.title')}</span>
+          </div>
+        )}
+
+        {initialLoading && sortedConversations.length === 0 && (
+          <div className={styles.loadingState}>
+            <SpinLoading color="primary" />
+            <span>{t('common.loading')}</span>
           </div>
         )}
 

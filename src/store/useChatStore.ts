@@ -11,6 +11,13 @@ interface ChatState {
   typing: Record<string, number>;
   /** 各会话增量同步游标：conversationKey → 已拉取的最大 seq */
   syncCursors: Record<string, number>;
+  /** 本地缓存是否已恢复 */
+  hydrated: boolean;
+  /** 首次会话列表请求是否仍在进行 */
+  initialLoading: boolean;
+  setHydrated: (hydrated: boolean) => void;
+  setInitialLoading: (loading: boolean) => void;
+  setSyncCursors: (cursors: Record<string, number>) => void;
   setConversations: (conversations: Conversation[]) => void;
   setActiveConversation: (conversation: Conversation | null) => void;
   addMessage: (key: string, message: Message) => void;
@@ -41,6 +48,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   pendingTimers: new Map(),
   typing: {},
   syncCursors: {},
+  hydrated: false,
+  initialLoading: true,
+  setHydrated: (hydrated) => set({ hydrated }),
+  setInitialLoading: (initialLoading) => set({ initialLoading }),
+  setSyncCursors: (syncCursors) => set({ syncCursors }),
   setConversations: (conversations) => set({ conversations }),
   setActiveConversation: (conversation) => set({ activeConversation: conversation }),
   addMessage: (key, message) =>

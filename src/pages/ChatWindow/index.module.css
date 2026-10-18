@@ -102,6 +102,16 @@
   padding: 8px 0;
 }
 
+.loadingHistory {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--c-text-muted);
+  font-size: 13px;
+  padding: 40px 0;
+}
+
 .noMore {
   text-align: center;
   color: #bbb;

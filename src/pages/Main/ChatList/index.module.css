@@ -191,6 +191,16 @@
   border-radius: var(--c-radius-lg);
 }
 
+.loadingState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 28px 0;
+  color: var(--c-text-muted);
+  font-size: var(--c-font-sm);
+}
+
 .deleteBtn {
   color: var(--c-danger);
   font-size: 12px;

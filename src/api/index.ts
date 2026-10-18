@@ -1,6 +1,7 @@
 ﻿import axios from 'axios';
 import type { Result, LoginResponse, User, Friend, Group, Message, MessageSyncResult, Conversation, GroupMember, AiConversation, UserAiConfig, SearchUser, FriendRequestItem, EmojiSticker, SearchResponse } from '../types';
 import { createRestCryptoRequest, decryptRestPayload, type EncryptedPayload } from '../services/restCrypto';
+import { clearChatCache, disposeChatCache } from '../services/chatCache';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -75,9 +76,18 @@ async function clearAuthAndRedirect() {
   } catch {
     // 网络失败不阻塞本地清理
   }
+  const rawUser = localStorage.getItem('user');
+  let userId: string | undefined;
+  try {
+    userId = rawUser ? (JSON.parse(rawUser) as { userId?: string }).userId : undefined;
+  } catch {
+    userId = undefined;
+  }
   localStorage.removeItem('token');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('user');
+  disposeChatCache();
+  if (userId) void clearChatCache(userId);
   window.location.href = '/login';
 }
 

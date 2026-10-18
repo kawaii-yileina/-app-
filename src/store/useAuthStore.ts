@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { authApi } from '../api';
+import { clearChatCache, disposeChatCache } from '../services/chatCache';
 import { useChatStore } from './useChatStore';
 import type { User } from '../types';
 
@@ -26,7 +27,7 @@ const readUser = (): User | null => {
 const initialToken = localStorage.getItem('token');
 const initialUser = initialToken ? readUser() : null;
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   token: initialToken,
   user: initialUser,
   isAuthenticated: !!initialToken,
@@ -45,11 +46,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   logout: () => {
     const refreshToken = localStorage.getItem('refreshToken') || undefined;
+    const userId = get().user?.userId;
     authApi.logout(refreshToken).catch(() => {});
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
     resetChatState();
+    disposeChatCache();
+    if (userId) void clearChatCache(String(userId));
     set({ token: null, user: null, isAuthenticated: false });
   },
   updateUser: (userData) =>
@@ -67,13 +71,21 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ token, user: res.data, isAuthenticated: true });
       }
     } catch (e) {
-      // token 无效：清理本地登录态，避免携带无效 token 反复请求
-      localStorage.removeItem('token');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
-      resetChatState();
-      set({ token: null, user: null, isAuthenticated: false });
-      console.error('Failed to restore session:', e);
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      if (status === 401 || status === 403) {
+        // token 失效：清理本地登录态，避免携带无效 token 反复请求
+        const userId = get().user?.userId;
+        localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        resetChatState();
+        disposeChatCache();
+        if (userId) void clearChatCache(String(userId));
+        set({ token: null, user: null, isAuthenticated: false });
+      } else {
+        // 网络不可用：保留登录态与本地缓存，离线仍可查看近期消息
+        console.warn('Failed to restore session, keep local state:', e);
+      }
     }
   },
 }));
@@ -87,6 +99,8 @@ function resetChatState() {
     syncCursors: {},
     typing: {},
     pendingTimers: new Map(),
+    hydrated: false,
+    initialLoading: true,
   });
 }
 
