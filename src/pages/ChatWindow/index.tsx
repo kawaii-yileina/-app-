@@ -1218,9 +1218,14 @@ const ChatWindow = () => {
           <div className={styles.backArrow}>‹</div>
         </div>
         <div className={styles.headerTitle}>
-          <span className={styles.titleText}>{getChatTitle()}</span>
-          {chatType === 0 && (
-            <span className={`${styles.statusDot} ${isTargetOnline ? styles.online : ''}`} />
+          <div className={styles.titleRow}>
+            <span className={styles.titleText}>{getChatTitle()}</span>
+            {chatType === 0 && (
+              <span className={`${styles.statusDot} ${isTargetOnline ? styles.online : ''}`} />
+            )}
+          </div>
+          {peerTyping && !isAiChat && chatType === 0 && (
+            <span className={styles.typingBar}>{t('chat.typing')}</span>
           )}
         </div>
         <div className={styles.headerRight}>
@@ -1365,17 +1370,6 @@ const ChatWindow = () => {
         </div>
       )}
 
-      {peerTyping && !isAiChat && chatType === 0 && (
-        <div className={styles.typingHint}>
-          <span className={styles.typingDots}>
-            <i />
-            <i />
-            <i />
-          </span>
-          {t('chat.typing')}
-        </div>
-      )}
-
       {targetDeleted && (
         <div className={styles.deletedBanner}>{t('chat.userDeleted')}</div>
       )}
@@ -1420,7 +1414,12 @@ const ChatWindow = () => {
               onChange={handleInputChange}
               onKeyDown={handleInputKeyDown}
               onEnterPress={sendTextMessage}
-              onFocus={() => { setShowActions(false); setShowEmoji(false); }}
+              onFocus={() => {
+                setShowActions(false);
+                setShowEmoji(false);
+                sendTyping();
+              }}
+              onClick={sendTyping}
               placeholder={t('chat.messagePlaceholder')}
               className={styles.input}
             />
