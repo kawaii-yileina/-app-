@@ -36,14 +36,27 @@ import Settings from './pages/Profile/Settings';
 import ChangePassword from './pages/Profile/Settings/ChangePassword';
 import DeleteAccount from './pages/Profile/Settings/DeleteAccount';
 import SelectTarget from './pages/Chat/SelectTarget';
+import SearchPage from './pages/Search';
+import { installBackGuard, runBackGuard } from './services/backGuard';
 
 const BackButtonHandler = () => {
+  const { t } = useTranslation();
   useEffect(() => {
+    const uninstall = installBackGuard();
+    let lastBackAt = 0;
+
     const subscription = CapApp.addListener('backButton', ({ canGoBack }) => {
-      const hasPopup = document.querySelector('.adm-popup,.adm-center-popup,.adm-dialog-wrap,.adm-action-sheet');
-      if (hasPopup) {
-        const mask = document.querySelector('.adm-mask') as HTMLElement;
-        if (mask) mask.click();
+      if (runBackGuard()) return;
+
+      // antd-mobile 浮层兜底：优先点关闭按钮，其次点击最上层遮罩
+      const closeButton = document.querySelector('.adm-image-viewer-close') as HTMLElement | null;
+      if (closeButton) {
+        closeButton.click();
+        return;
+      }
+      const masks = document.querySelectorAll('.adm-mask');
+      if (masks.length > 0) {
+        (masks[masks.length - 1] as HTMLElement).click();
         return;
       }
 
@@ -52,7 +65,13 @@ const BackButtonHandler = () => {
       const isHome = homePaths.includes(path);
 
       if (isHome) {
-        CapApp.exitApp();
+        const now = Date.now();
+        if (now - lastBackAt < 2000) {
+          CapApp.exitApp();
+        } else {
+          lastBackAt = now;
+          Toast.show({ content: t('common.pressAgainToExit') });
+        }
       } else if (canGoBack) {
         window.history.back();
       } else {
@@ -62,8 +81,9 @@ const BackButtonHandler = () => {
 
     return () => {
       subscription.then((sub) => sub.remove());
+      uninstall();
     };
-  }, []);
+  }, [t]);
 
   return null;
 };
@@ -195,10 +215,15 @@ const WebSocketProvider = () => {
           case SystemEventType.GROUP_QUIT:
           case SystemEventType.GROUP_TRANSFER:
           case SystemEventType.GROUP_RENAME:
+          case SystemEventType.GROUP_ADMIN_SET:
+          case SystemEventType.GROUP_ADMIN_UNSET:
             // 群组变化，刷新群组列表
             contactApi.getGroups().then(res => {
               if (res.code === 200) useContactStore.getState().setGroups(res.data);
             }).catch(() => {});
+            window.dispatchEvent(new CustomEvent('group:changed', {
+              detail: { groupId: content.split(':')[1] || '' },
+            }));
             break;
           case SystemEventType.MESSAGE_RECALL: {            // 消息撤回：content 格式 message_recall:msgId，本地替换为撤回态
             const recalledMsgId = content.split(':')[1] || '';
@@ -355,6 +380,7 @@ function App() {
           </Route>
 
           <Route path="/chat/:targetId" element={<PrivateRoute><ChatWindow /></PrivateRoute>} />
+          <Route path="/search" element={<PrivateRoute><SearchPage /></PrivateRoute>} />
           <Route path="/contacts/search" element={<PrivateRoute><AddFriend /></PrivateRoute>} />
           <Route path="/contacts/requests" element={<PrivateRoute><FriendRequests /></PrivateRoute>} />
           <Route path="/contacts/groups" element={<PrivateRoute><Groups /></PrivateRoute>} />

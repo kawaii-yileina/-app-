@@ -14,6 +14,7 @@ import type { Conversation } from '../../../types';
 import { avatarTint } from '../../../utils/avatarColor';
 import { refreshAll } from '../../../services/refresh';
 import { usePullRefresh } from '../../../hooks/usePullRefresh';
+import { useBackGuard } from '../../../hooks/useBackGuard';
 import styles from './index.module.css';
 
 const ChatList = () => {
@@ -30,6 +31,9 @@ const ChatList = () => {
   const [models, setModels] = useState<HermesModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [showModelPicker, setShowModelPicker] = useState(false);
+
+  useBackGuard(showCreateDialog, () => setShowCreateDialog(false));
+  useBackGuard(showModelPicker, () => setShowModelPicker(false));
 
   const formatPreview = (content: string) => formatConversationPreview(content, t);
 
@@ -151,7 +155,9 @@ const ChatList = () => {
     <div className={styles.container}>
       <div className={styles.header}>
         <h2 className={styles.title}>{t('tab.chats')}</h2>
-        <SearchBar placeholder={t('common.search')} className={styles.search} />
+          <div onClick={() => navigate('/search')}>
+            <SearchBar placeholder={t('common.search')} className={styles.search} />
+          </div>
       </div>
 
       <div className={styles.list}>

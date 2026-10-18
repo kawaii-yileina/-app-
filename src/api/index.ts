@@ -1,10 +1,11 @@
-import axios from 'axios';
-import type { Result, LoginResponse, User, Friend, Group, Message, MessageSyncResult, Conversation, GroupMember, AiConversation, UserAiConfig, SearchUser, FriendRequestItem, EmojiSticker } from '../types';
+﻿import axios from 'axios';
+import type { Result, LoginResponse, User, Friend, Group, Message, MessageSyncResult, Conversation, GroupMember, AiConversation, UserAiConfig, SearchUser, FriendRequestItem, EmojiSticker, SearchResponse } from '../types';
 import { createRestCryptoRequest, decryptRestPayload, type EncryptedPayload } from '../services/restCrypto';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 120000,
+  withCredentials: true,
 });
 
 api.interceptors.request.use(async (config) => {
@@ -43,7 +44,7 @@ async function refreshAccessToken(): Promise<string> {
       const res = await axios.post(
         `${import.meta.env.VITE_API_BASE_URL || '/api'}/auth/refresh`,
         { refreshToken },
-        { timeout: 15000 }
+        { timeout: 15000, withCredentials: true }
       );
       const data = res.data?.data;
       if (!data?.token) throw new Error(res.data?.message || 'refresh failed');
@@ -60,7 +61,20 @@ async function refreshAccessToken(): Promise<string> {
   return refreshPromise;
 }
 
-function clearAuthAndRedirect() {
+async function clearAuthAndRedirect() {
+  // 顺带清除服务端 HttpOnly 文件 Cookie，避免本地登出后仍可读文件
+  try {
+    const base = import.meta.env.VITE_API_BASE_URL || '/api';
+    await fetch(`${base}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+      keepalive: true,
+    });
+  } catch {
+    // 网络失败不阻塞本地清理
+  }
   localStorage.removeItem('token');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('user');
@@ -105,14 +119,14 @@ api.interceptors.response.use(
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
       } catch (refreshError) {
-        clearAuthAndRedirect();
+        await clearAuthAndRedirect();
         return Promise.reject(refreshError);
       }
     }
 
     // 401 且无法刷新（如 refresh 已失效）：清理并回登录页
     if (status === 401) {
-      clearAuthAndRedirect();
+      await clearAuthAndRedirect();
     }
     return Promise.reject(error);
   }
@@ -137,6 +151,7 @@ export const authApi = {
   updateProfile: (data: { nickname?: string; signature?: string; avatar?: string }) =>
     api.put<any, Result<User>>('/auth/me', data),
   logout: (refreshToken?: string) => api.post<any, Result<void>>('/auth/logout', { refreshToken }),
+  createWsTicket: () => api.post<any, Result<{ ticket: string; expiresIn: number }>>('/auth/ws-ticket'),
 };
 
 export const contactApi = {
@@ -157,6 +172,10 @@ export const contactApi = {
     api.get<any, Result<GroupMember[]>>(`/contacts/groups/${groupId}/members`),
   addGroupMember: (groupId: string, userId: string) =>
     api.post<any, Result<void>>(`/contacts/groups/${groupId}/members`, { userId }),
+  setGroupAdmin: (groupId: string, userId: string) =>
+    api.post<any, Result<void>>(`/contacts/groups/${groupId}/admins`, { userId }),
+  unsetGroupAdmin: (groupId: string, userId: string) =>
+    api.delete<any, Result<void>>(`/contacts/groups/${groupId}/admins/${userId}`),
   removeGroupMember: (groupId: string, memberId: string) =>
     api.delete<any, Result<void>>(`/contacts/groups/${groupId}/members/${memberId}`),
   transferGroupOwner: (groupId: string, newOwnerId: string) =>
@@ -185,6 +204,11 @@ export const messageApi = {
   syncMessages: (targetId: string, chatType: number, sinceSeq = 0, limit = 200) =>
     api.get<any, Result<MessageSyncResult>>('/messages/sync', {
       params: { targetId, chatType, sinceSeq, limit },
+      restEncrypted: true,
+    }),
+  getAround: (targetId: string, chatType: number, seq: number, limit = 30) =>
+    api.get<any, Result<Message[]>>('/messages/around', {
+      params: { targetId, chatType, seq, limit },
       restEncrypted: true,
     }),
   markAsRead: (targetId: string, chatType: number) =>
@@ -273,6 +297,17 @@ export const emojiApi = {
   list: () => api.get<any, Result<EmojiSticker[]>>('/emoji/stickers'),
   add: (url: string) => api.post<any, Result<EmojiSticker>>('/emoji/stickers', { url }),
   remove: (id: string) => api.delete<any, Result<void>>(`/emoji/stickers/${id}`),
+};
+
+export const searchApi = {
+  search: (
+    params: { keyword: string; types?: string; limit?: number; groupId?: string },
+    signal?: AbortSignal,
+  ) => api.get<any, Result<SearchResponse>>('/search', {
+    params,
+    signal,
+    restEncrypted: true,
+  }),
 };
 
 export const aiApi = {  chat: (message: string, sessionId?: string) =>

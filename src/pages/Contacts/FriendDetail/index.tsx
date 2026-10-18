@@ -7,6 +7,7 @@ import { resolveFileUrl } from '../../../utils/fileUrl';
 import { useContactStore } from '../../../store/useContactStore';
 import type { SearchUser } from '../../../types';
 import SharedAvatar from '../../../components/SharedAvatar';
+import { useBackGuard } from '../../../hooks/useBackGuard';
 import styles from './index.module.css';
 
 const FriendDetail = () => {
@@ -17,6 +18,8 @@ const FriendDetail = () => {
   const [user, setUser] = useState<SearchUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
+
+  useBackGuard(showMenu, () => setShowMenu(false));
 
   useEffect(() => {
     loadUser();

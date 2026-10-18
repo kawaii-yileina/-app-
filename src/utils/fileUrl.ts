@@ -1,19 +1,14 @@
 /**
- * 将相对文件路径（如 /api/files/local/xxx）拼上后端域名，并追加 JWT 鉴权：
- * - 后端文件接口已要求登录，<img>/<video>/<audio> 无法携带 Authorization 头，
- *   故统一用 JWT 双通道中的 ?token= 形式附加（见后端 JwtAuthenticationFilter）。
+ * 将相对文件路径（如 /api/files/local/xxx）拼上后端域名。
+ * 文件鉴权使用服务端下发的 HttpOnly Cookie（im_file_token），
+ * 不再把 JWT 放进 URL，避免访问日志/Referer/浏览器历史泄露。
  * - 绝对 URL（http/https/data:/blob:）直接返回。
- * - 仅对本站文件接口（/api/files/）追加 token，避免把令牌带到外部地址。
  */
 export const resolveFileUrl = (url: string): string => {
   if (!url || url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:')) return url;
   const apiBase = import.meta.env.VITE_API_BASE_URL || '';
   const origin = apiBase.replace(/\/api\/?$/, '');
-  const resolved = origin + url;
-  if (!url.startsWith('/api/files/')) return resolved;
-  const token = localStorage.getItem('token');
-  if (!token) return resolved;
-  return `${resolved}${resolved.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+  return origin + url;
 };
 
 /**

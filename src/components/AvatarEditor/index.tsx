@@ -5,6 +5,7 @@ import { Camera, Image as ImageIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Area } from 'react-easy-crop';
 import { uploadErrorMessage } from '../../utils/uploadError';
+import { useBackGuard } from '../../hooks/useBackGuard';
 import styles from './index.module.css';
 
 interface Props {
@@ -96,6 +97,8 @@ const AvatarEditor = ({ visible, onClose, onUpload }: Props) => {
     setCroppedArea(null);
     onClose();
   };
+
+  useBackGuard(visible, handleClose);
 
   return (
     <Popup

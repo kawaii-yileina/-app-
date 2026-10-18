@@ -1,5 +1,6 @@
 import { Toast } from 'antd-mobile';
 import i18n from '../i18n';
+import { authApi } from '../api';
 import type { ChatMessage } from '../types';
 import { CryptoSession, loadCryptoConfig, type WireMessage } from './cryptoSession';
 
@@ -54,6 +55,7 @@ class WebSocketService {
   private manualClose = false;
   private userId: string | null = null;
   private lastToken: string | null = null;
+  private connectAttempt = 0;
   private networkBound = false;
 
   // 应用层加密
@@ -101,11 +103,11 @@ class WebSocketService {
     }
     this.manualClose = false;
     this.lastToken = token;
+    const attempt = ++this.connectAttempt;
     this.ensureNetworkListeners();
     const rawBase = import.meta.env.VITE_WS_URL || 'ws://localhost:9100/ws/api/';
     const base = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
     const deviceId = encodeURIComponent(`${getOrCreateDeviceId()}-${getTabId()}`);
-    const wsUrl = `${base}?token=${token}&deviceId=${deviceId}&deviceType=web`;
 
     const cryptoConfig = loadCryptoConfig();
     if (cryptoConfig.enabled && !cryptoConfig.serverSpkiB64) {
@@ -126,53 +128,76 @@ class WebSocketService {
     this.clearHandshakeTimer();
 
     console.log('WebSocket connecting:', base);
-    const socket = new WebSocket(wsUrl);
-    this.ws = socket;
+    void this.openSocket(token, base, deviceId, attempt);
+  }
 
-    socket.onopen = () => {
-      if (this.ws !== socket) return;
-      console.log('WebSocket connected');
-      this.reconnectAttempts = 0;
-      if (this.cryptoState === 'handshaking' && this.crypto) {
-        this.startHandshake();
-        this.handshakeTimer = setTimeout(() => {
-          console.error('crypto handshake timeout');
-          this.cryptoFail('chat.cryptoHandshakeFailed');
-        }, 10000);
-      } else {
-        this.onReady();
+  /** 先向 REST 换取一次性 ticket，再建立 WS；URL 中不再出现 access token */
+  private async openSocket(token: string, base: string, deviceId: string, attempt: number) {
+    try {
+      const res = await authApi.createWsTicket();
+      if (attempt !== this.connectAttempt || this.lastToken !== token) return;
+      if (res.code !== 200 || !res.data?.ticket) {
+        throw new Error(res.message || 'WS_TICKET_FAILED');
       }
-    };
+      const wsUrl = `${base}?ticket=${encodeURIComponent(res.data.ticket)}&deviceId=${deviceId}&deviceType=web`;
+      const previous = this.ws;
+      const socket = new WebSocket(wsUrl);
+      if (previous && previous !== socket) {
+        previous.onclose = null;
+        previous.onerror = null;
+        previous.close();
+      }
+      this.ws = socket;
 
-    socket.onmessage = (event) => {
-      if (this.ws !== socket) return;
-      this.handleMessage(event.data);
-    };
-
-    socket.onclose = (event) => {
-      if (this.ws !== socket) return;
-      console.log(
-        `WebSocket disconnected code=${event.code} reason=${event.reason || '-'} clean=${event.wasClean}`
-      );
-      this.stopHeartbeat();
-      this.clearHandshakeTimer();
-      if (this.manualClose) return;
-      if (this.cryptoState === 'handshaking') {
-        // 握手阶段连续断开（如服务端未开加密/配置错配）：给出提示并停止无意义重连
-        this.handshakeFailures++;
-        if (this.handshakeFailures >= 3) {
-          this.cryptoFailShown = false;
-          this.cryptoFail('chat.cryptoHandshakeFailed');
-          return;
+      socket.onopen = () => {
+        if (this.ws !== socket) return;
+        console.log('WebSocket connected');
+        this.reconnectAttempts = 0;
+        if (this.cryptoState === 'handshaking' && this.crypto) {
+          this.startHandshake();
+          this.handshakeTimer = setTimeout(() => {
+            console.error('crypto handshake timeout');
+            this.cryptoFail('chat.cryptoHandshakeFailed');
+          }, 10000);
+        } else {
+          this.onReady();
         }
-      }
-      this.tryReconnect(token);
-    };
+      };
 
-    socket.onerror = (error) => {
-      if (this.ws !== socket) return;
-      console.error('WebSocket error:', error);
-    };
+      socket.onmessage = (event) => {
+        if (this.ws !== socket) return;
+        this.handleMessage(event.data);
+      };
+
+      socket.onclose = (event) => {
+        if (this.ws !== socket) return;
+        console.log(
+          `WebSocket disconnected code=${event.code} reason=${event.reason || '-'} clean=${event.wasClean}`
+        );
+        this.stopHeartbeat();
+        this.clearHandshakeTimer();
+        if (this.manualClose) return;
+        if (this.cryptoState === 'handshaking') {
+          // 握手阶段连续断开（如服务端未开加密/配置错配）：给出提示并停止无意义重连
+          this.handshakeFailures++;
+          if (this.handshakeFailures >= 3) {
+            this.cryptoFailShown = false;
+            this.cryptoFail('chat.cryptoHandshakeFailed');
+            return;
+          }
+        }
+        this.tryReconnect(token);
+      };
+
+      socket.onerror = (error) => {
+        if (this.ws !== socket) return;
+        console.error('WebSocket error:', error);
+      };
+    } catch (e) {
+      if (attempt !== this.connectAttempt || this.lastToken !== token) return;
+      console.error('Failed to obtain WS ticket:', e);
+      this.tryReconnect(token);
+    }
   }
 
   private async startHandshake() {

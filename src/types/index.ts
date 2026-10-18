@@ -16,6 +16,56 @@ export interface SearchUser extends User {
   requestStatus: number;
 }
 
+export interface SearchCategory<T> {
+  total: number;
+  items: T[];
+}
+
+export interface SearchContactItem {
+  userId: string;
+  username: string;
+  nickname: string;
+  avatar: string;
+  signature: string;
+  isFriend: number;
+}
+
+export interface SearchGroupItem {
+  id: string;
+  name: string;
+  avatar: string;
+  ownerId: string;
+}
+
+export interface SearchMemberItem {
+  userId: string;
+  username: string;
+  nickname: string;
+  avatar: string;
+  groupId: string;
+  groupName: string;
+  role: number;
+}
+
+export interface SearchMessageItem {
+  msgId: string;
+  seq: string | number;
+  targetId: string;
+  chatType: number;
+  senderId: string;
+  senderName: string;
+  groupName: string | null;
+  content: string;
+  createdAt: string;
+}
+
+export interface SearchResponse {
+  contacts: SearchCategory<SearchContactItem>;
+  groups: SearchCategory<SearchGroupItem>;
+  members: SearchCategory<SearchMemberItem>;
+  messages: SearchCategory<SearchMessageItem>;
+}
+
 export interface FriendRequestItem {
   id: string;
   fromId: string;
@@ -119,6 +169,8 @@ export const SystemEventType = {
   GROUP_QUIT: 'group_quit',
   GROUP_TRANSFER: 'group_transfer',
   GROUP_RENAME: 'group_rename',
+  GROUP_ADMIN_SET: 'group_admin_set',
+  GROUP_ADMIN_UNSET: 'group_admin_unset',
   MESSAGE_RECALL: 'message_recall',
   RATE_LIMITED: 'rate_limited',
 } as const;

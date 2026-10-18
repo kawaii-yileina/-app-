@@ -6,6 +6,7 @@ import { File, Video, Phone, Play, Pause, X, Maximize2 } from 'lucide-react';
 import { Toast, SpinLoading } from 'antd-mobile';
 import { resolveFileUrl, isInlineMediaSrc } from '../../utils/fileUrl';
 import { useMediaUrl } from '../../hooks/useMediaUrl';
+import { useBackGuard } from '../../hooks/useBackGuard';
 import { getCachedObjectUrl } from '../../services/mediaCache';
 import { downloadFile } from '../../utils/download';
 import { avatarTint } from '../../utils/avatarColor';
@@ -239,6 +240,8 @@ const VideoMessage = ({ rawSrc, size }: { rawSrc: string; size?: string }) => {
     setPlaying(true);
     setPaused(true);
   };
+
+  useBackGuard(fullscreen, closeFullscreen);
 
   const toggle = (video: HTMLVideoElement | null) => {
     if (!video) return;

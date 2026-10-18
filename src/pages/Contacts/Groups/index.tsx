@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { contactApi } from '../../../api';
 import { refreshGroups } from '../../../services/refresh';
 import { usePullRefresh } from '../../../hooks/usePullRefresh';
+import { useBackGuard } from '../../../hooks/useBackGuard';
 import { useContactStore } from '../../../store/useContactStore';
 import { avatarTint } from '../../../utils/avatarColor';
 import type { Group } from '../../../types';
@@ -18,6 +19,8 @@ const Groups = () => {
   const setGroups = useContactStore((s) => s.setGroups);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [groupName, setGroupName] = useState('');
+
+  useBackGuard(showCreateDialog, () => setShowCreateDialog(false));
 
   const handleCreateGroup = async () => {
     if (!groupName.trim()) {

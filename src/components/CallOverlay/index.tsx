@@ -5,6 +5,7 @@ import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, PictureInPicture2, Switc
 import { useCallStore } from '../../store/useCallStore';
 import callManager from '../../services/call';
 import { resolveFileUrl } from '../../utils/fileUrl';
+import { useBackGuard } from '../../hooks/useBackGuard';
 import type { CallEndReason } from '../../types/call';
 import styles from './CallOverlay.module.css';
 
@@ -98,6 +99,21 @@ export default function CallOverlay() {
   const canMinimize = phase === 'outgoing' || inCall;
   // 视频画面：通话中/连接中/呼叫中（来电未接前仍显示头像）
   const showVideoSurface = isVideo && phase !== 'incoming' && phase !== 'ended';
+
+  useBackGuard(phase !== 'idle' && !!peer, () => {
+    const state = useCallStore.getState();
+    if (state.minimized) {
+      state.setMinimized(false);
+      return;
+    }
+    if (state.phase === 'incoming') {
+      callManager.reject();
+    } else if (state.phase === 'ended') {
+      state.reset();
+    } else {
+      callManager.hangup();
+    }
+  });
 
   if (phase === 'idle' || !peer) {
     return null;

@@ -35,6 +35,7 @@ import MessageBubble from '../../components/MessageBubble';
 import SharedAvatar from '../../components/SharedAvatar';
 import type { Message, ChatMessage, GroupMember, MentionInfo, EmojiSticker } from '../../types';
 import { AI_ASSISTANT } from '../../types';
+import { useBackGuard } from '../../hooks/useBackGuard';
 import styles from './index.module.css';
 import callManager from '../../services/call';
 
@@ -55,6 +56,8 @@ const ChatWindow = () => {
   const navigate = useNavigate();
   const chatType = parseInt(searchParams.get('type') || '0');
   const sessionId = searchParams.get('session');
+  const aroundSeq = Number(searchParams.get('aroundSeq') || 0);
+  const focusMsgId = searchParams.get('msgId') || '';
   const isAiChat = String(targetId) === String(AI_ASSISTANT.ID);
 
   const user = useAuthStore((s) => s.user);
@@ -103,6 +106,17 @@ const ChatWindow = () => {
   const [mentions, setMentions] = useState<MentionInfo[]>([]);
   const [mentionPickerVisible, setMentionPickerVisible] = useState(false);
   const [mentionKeyword, setMentionKeyword] = useState('');
+
+  useBackGuard(imageViewerVisible, () => setImageViewerVisible(false));
+  useBackGuard(showModelPicker, () => setShowModelPicker(false));
+  useBackGuard(mentionPickerVisible, () => {
+    setMentionPickerVisible(false);
+    setMentionKeyword('');
+  });
+  useBackGuard(contextMenuVisible, () => {
+    setContextMenuVisible(false);
+    setSelectedMessage(null);
+  });
   const [peerTyping, setPeerTyping] = useState(false);
   const [emojiTab, setEmojiTab] = useState<'emoji' | 'sticker'>('emoji');
   const [stickers, setStickers] = useState<EmojiSticker[]>([]);
@@ -128,6 +142,7 @@ const ChatWindow = () => {
     ? (sessionId || `ai_${user?.userId}`) 
     : `${targetId}_${chatType}`;
   const conversationMessages = isAiChat ? aiMessages : (messages[conversationKey] || []);
+  const [aroundActive, setAroundActive] = useState(aroundSeq > 0);
 
   const targetFriend = !isAiChat && chatType === 0
     ? friends.find((f) => f.userId === targetId)
@@ -169,9 +184,10 @@ const ChatWindow = () => {
         })
         .catch(() => {});
     }
-  }, [targetId, chatType, sessionId]);
+  }, [targetId, chatType, sessionId, aroundSeq]);
 
   useEffect(() => {
+    if (aroundActive) return;
     requestAnimationFrame(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
     });
@@ -264,6 +280,42 @@ const ChatWindow = () => {
           await aiLoadMessages(sessionId);
         }
       } else {
+        if (aroundSeq > 0) {
+          setAroundActive(true);
+          const aroundRes = await messageApi.getAround(targetId!, chatType, aroundSeq, 30);
+          if (aroundRes.code === 200) {
+            const data = aroundRes.data || [];
+            useChatStore.getState().setMessages(
+              conversationKey, data.map(normalizeServerMessage));
+            setHasMore(false);
+            const maxSeq = data.reduce((m, x) => Math.max(m, Number(x.seq) || 0), 0);
+            if (maxSeq > 0) {
+              useChatStore.getState().setSyncCursor(conversationKey, maxSeq);
+            }
+            syncConversation(targetId!, chatType).catch((e) => console.warn('sync after around failed:', targetId, e));
+            if (focusMsgId) {
+              const tryScroll = (attempt = 0) => {
+                if (scrollToMessage(focusMsgId)) {
+                  setAroundActive(false);
+                  return;
+                }
+                if (attempt < 2) {
+                  window.setTimeout(() => tryScroll(attempt + 1), 150);
+                } else {
+                  setAroundActive(false);
+                  Toast.show({ content: t('chat.quoteNotLoaded') });
+                }
+              };
+              window.setTimeout(tryScroll, 120);
+            } else {
+              setAroundActive(false);
+            }
+          } else {
+            setAroundActive(false);
+          }
+          return;
+        }
+
         const res = await messageApi.getHistory(targetId!, chatType);
         if (res.code === 200) {
           const data = res.data || [];
@@ -279,11 +331,12 @@ const ChatWindow = () => {
       }
     } catch (e) {
       console.error('Failed to load history:', e);
+      setAroundActive(false);
     }
   };
 
   const loadMore = async () => {
-    if (!targetId || isAiChat || loadingMore || !hasMore) return;
+    if (!targetId || isAiChat || loadingMore || !hasMore || aroundActive) return;
     setLoadingMore(true);
     const listEl = messageListRef.current;
     const prevScrollHeight = listEl?.scrollHeight || 0;
@@ -998,18 +1051,24 @@ const ChatWindow = () => {
     requestAnimationFrame(() => el.setSelectionRange(start, start));
   };
 
-  /** 点击引用块：定位并高亮原消息（不在已加载范围时提示） */
-  const handleQuoteClick = (replyMsgId: string) => {
-    const el = messageListRef.current?.querySelector(`[data-msg-id="${replyMsgId}"]`) as HTMLElement | null;
-    if (!el) {
-      Toast.show({ content: t('chat.quoteNotLoaded') });
-      return;
-    }
+  /** 定位并高亮消息（引用、搜索跳转共用） */
+  const scrollToMessage = (msgId: string): boolean => {
+    const escaped = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(msgId) : msgId;
+    const el = messageListRef.current?.querySelector(`[data-msg-id="${escaped}"]`) as HTMLElement | null;
+    if (!el) return false;
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     el.animate(
-      [{ backgroundColor: 'rgba(7, 193, 96, 0.28)' }, { backgroundColor: 'transparent' }],
-      { duration: 1200, easing: 'ease-out' }
+      [{ backgroundColor: 'rgba(228, 88, 107, 0.26)' }, { backgroundColor: 'transparent' }],
+      { duration: 2000, easing: 'ease-out' }
     );
+    return true;
+  };
+
+  /** 点击引用块：定位并高亮原消息（不在已加载范围时提示） */
+  const handleQuoteClick = (replyMsgId: string) => {
+    if (!scrollToMessage(replyMsgId)) {
+      Toast.show({ content: t('chat.quoteNotLoaded') });
+    }
   };
 
   const handleResend = (msg: Message) => {
@@ -1183,7 +1242,7 @@ const ChatWindow = () => {
         {loadingMore && (
           <div className={styles.loadingMore}>{t('common.loading')}</div>
         )}
-        {!isAiChat && !hasMore && conversationMessages.length > 0 && (
+        {!isAiChat && aroundSeq === 0 && !hasMore && conversationMessages.length > 0 && (
           <div className={styles.noMore}>{t('chat.noMoreMessages')}</div>
         )}
         {isAiChat && conversationMessages.length === 0 && (

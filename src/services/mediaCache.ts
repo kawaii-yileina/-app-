@@ -81,7 +81,7 @@ const inflight = new Map<string, Promise<string>>();
 const blobInflight = new Map<string, Promise<Blob>>();
 
 async function fetchBlob(rawUrl: string): Promise<Blob> {
-  const res = await fetch(resolveFileUrl(rawUrl));
+  const res = await fetch(resolveFileUrl(rawUrl), { credentials: 'include' });
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);
   }
