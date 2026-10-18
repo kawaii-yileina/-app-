@@ -1,4 +1,4 @@
-import { resolveFileUrl } from '../../utils/fileUrl';
+import { useCachedMediaUrl } from '../../hooks/useCachedMediaUrl';
 import { avatarTint } from '../../utils/avatarColor';
 import styles from './index.module.css';
 
@@ -11,15 +11,16 @@ interface Props {
 
 const SharedAvatar = ({ name, src, size = 40, className }: Props) => {
   const sizeStyle = { width: size, height: size, fontSize: size * 0.4 };
-  const resolvedSrc = src ? resolveFileUrl(src) : undefined;
+  const { url, failed, onError } = useCachedMediaUrl(src, true);
 
-  if (resolvedSrc) {
+  if (url && !failed) {
     return (
       <img
-        src={resolvedSrc}
+        src={url}
         alt={name || 'avatar'}
         className={`${styles.imgAvatar} ${className || ''}`}
         style={sizeStyle}
+        onError={onError}
       />
     );
   }

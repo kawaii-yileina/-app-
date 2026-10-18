@@ -4,7 +4,7 @@ import { Toast } from 'antd-mobile';
 import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, PictureInPicture2, SwitchCamera, Volume2, VolumeX } from 'lucide-react';
 import { useCallStore } from '../../store/useCallStore';
 import callManager from '../../services/call';
-import { resolveFileUrl } from '../../utils/fileUrl';
+import { useCachedMediaUrl } from '../../hooks/useCachedMediaUrl';
 import { useBackGuard } from '../../hooks/useBackGuard';
 import type { CallEndReason } from '../../types/call';
 import styles from './CallOverlay.module.css';
@@ -49,6 +49,7 @@ export default function CallOverlay() {
   const localRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
+  const peerAvatar = useCachedMediaUrl(peer?.avatar, true);
 
   useEffect(() => {
     if (phase !== 'active' || !startedAt) {
@@ -126,8 +127,8 @@ export default function CallOverlay() {
   else if (phase === 'active') status = fmtDuration(elapsed);
   else if (phase === 'ended') status = t(reasonKey(endReason));
 
-  const avatarNode = peer.avatar ? (
-    <img className={styles.avatar} src={resolveFileUrl(peer.avatar)} alt="" />
+  const avatarNode = peerAvatar.url && !peerAvatar.failed ? (
+    <img className={styles.avatar} src={peerAvatar.url} alt="" onError={peerAvatar.onError} />
   ) : (
     <div className={`${styles.avatar} ${styles.avatarFallback}`}>{(peer.name || '?').slice(0, 1).toUpperCase()}</div>
   );
@@ -215,7 +216,9 @@ export default function CallOverlay() {
             />
           ) : (
             <span className={styles.miniBigAvatar}>
-              {peer.avatar ? <img src={resolveFileUrl(peer.avatar)} alt="" /> : (peer.name || '?').slice(0, 1).toUpperCase()}
+              {peerAvatar.url && !peerAvatar.failed
+                ? <img src={peerAvatar.url} alt="" onError={peerAvatar.onError} />
+                : (peer.name || '?').slice(0, 1).toUpperCase()}
             </span>
           )}
           <span className={styles.miniMeta}>
@@ -248,7 +251,9 @@ export default function CallOverlay() {
 
   return (
     <div className={`${styles.overlay} ${showVideoSurface ? styles.videoMode : ''}`}>
-      {!showVideoSurface && peer.avatar && <img className={styles.callBg} src={resolveFileUrl(peer.avatar)} alt="" />}
+      {!showVideoSurface && peerAvatar.url && !peerAvatar.failed && (
+        <img className={styles.callBg} src={peerAvatar.url} alt="" onError={peerAvatar.onError} />
+      )}
       <div className={styles.scrim} />
 
       {showVideoSurface && (

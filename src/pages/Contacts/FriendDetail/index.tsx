@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { NavBar, Toast, Dialog, ImageViewer, Popup } from 'antd-mobile';
 import { useTranslation } from 'react-i18next';
 import { userApi, contactApi } from '../../../api';
-import { resolveFileUrl } from '../../../utils/fileUrl';
+import { getCachedObjectUrl } from '../../../services/mediaCache';
 import { useContactStore } from '../../../store/useContactStore';
 import type { SearchUser } from '../../../types';
 import SharedAvatar from '../../../components/SharedAvatar';
@@ -74,10 +74,10 @@ const FriendDetail = () => {
     }
   };
 
-  const handleAvatarClick = () => {
-    if (user?.avatar) {
-      ImageViewer.show({ image: resolveFileUrl(user.avatar) });
-    }
+  const handleAvatarClick = async () => {
+    if (!user?.avatar) return;
+    const image = await getCachedObjectUrl(user.avatar);
+    ImageViewer.show({ image });
   };
 
   const handleMessage = () => {

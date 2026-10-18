@@ -3,7 +3,8 @@ import { resolveFileUrl } from '../utils/fileUrl';
 
 /**
  * 媒体本地缓存（IndexedDB）：图片 / 语音 / 视频 / 文件。
- * App 端缓存上限 2GB，超过 60 天未访问的记录自动清理；按最近访问时间淘汰。
+ * App 端缓存上限 2GB，超过 60 天未访问的记录自动清理；Web 端保持 200MB 且不做时间清理。
+ * 按最近访问时间淘汰。
  */
 
 const DB_NAME = 'im-media-cache';
@@ -275,6 +276,53 @@ async function touchInDb(key: string): Promise<void> {
     await touchRecord(db, key);
   } catch {
     /* 忽略：续期失败不影响展示 */
+  }
+}
+
+/** 只读取已缓存媒体，不发起网络请求（供视频封面等离线场景使用） */
+export async function peekCachedObjectUrl(rawUrl: string): Promise<string | null> {
+  const key = mediaCacheKey(rawUrl);
+  if (!key) return null;
+  const existing = objectUrls.get(key);
+  if (existing) {
+    void touchInDb(key);
+    return existing;
+  }
+  try {
+    const db = await openDb();
+    const record = await getBlobRecord(db, key);
+    if (!record) return null;
+    const obj = URL.createObjectURL(record.blob);
+    objectUrls.set(key, obj);
+    void touchRecord(db, key).catch(() => {});
+    return obj;
+  } catch {
+    return null;
+  }
+}
+
+const revalidatedKeys = new Set<string>();
+
+/** 联网后后台刷新头像等媒体；每个 key 每轮会话只刷新一次 */
+export async function revalidateMediaUrl(rawUrl: string): Promise<string | null> {
+  const key = mediaCacheKey(rawUrl);
+  if (!key || revalidatedKeys.has(key)) return null;
+  revalidatedKeys.add(key);
+  try {
+    const db = await openDb();
+    const blob = await fetchBlob(rawUrl);
+    try {
+      await putRecord(db, key, blob);
+      void enforceLimit(db).catch(() => {});
+    } catch (e) {
+      console.warn('media revalidate write failed:', e);
+    }
+    const obj = URL.createObjectURL(blob);
+    objectUrls.set(key, obj);
+    return obj;
+  } catch {
+    revalidatedKeys.delete(key);
+    return null;
   }
 }
 

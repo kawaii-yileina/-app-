@@ -9,9 +9,8 @@ import { AI_ASSISTANT } from '../../../types';
 import { formatConversationPreview } from '../../../utils/messagePreview';
 import { aiApi, messageApi } from '../../../api';
 import { createSession, getModels, type HermesModel } from '../../../api/hermes';
-import { resolveFileUrl } from '../../../utils/fileUrl';
 import type { Conversation } from '../../../types';
-import { avatarTint } from '../../../utils/avatarColor';
+import SharedAvatar from '../../../components/SharedAvatar';
 import { refreshAll } from '../../../services/refresh';
 import { usePullRefresh } from '../../../hooks/usePullRefresh';
 import { useBackGuard } from '../../../hooks/useBackGuard';
@@ -252,13 +251,7 @@ const ChatList = () => {
                     </div>
                   ) : (
                     <>
-                      {info.avatar ? (
-                        <img src={resolveFileUrl(info.avatar)} alt={info.name} className={styles.avatar} />
-                      ) : (
-                        <div className={styles.avatar} style={{ background: avatarTint(info.name || conv.targetId) }}>
-                          {info.name?.charAt(0)}
-                        </div>
-                      )}
+                      <SharedAvatar name={info.name} src={info.avatar} size={52} />
                       {conv.chatType === 0 && info.isOnline && (
                         <div className={styles.onlineDot} />
                       )}

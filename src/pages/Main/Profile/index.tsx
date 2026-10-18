@@ -4,7 +4,6 @@ import { List, Button, Dialog } from 'antd-mobile';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../../store/useAuthStore';
 import { authApi, fileApi } from '../../../api';
-import { resolveFileUrl } from '../../../utils/fileUrl';
 import { ChevronRight, Settings, Sparkles, User } from 'lucide-react';
 import AvatarEditor from '../../../components/AvatarEditor';
 import SharedAvatar from '../../../components/SharedAvatar';
@@ -44,11 +43,7 @@ const Profile = () => {
     <div className={styles.container}>
       <div className={styles.header} onClick={() => navigate('/profile/info')}>
         <div className={styles.avatar} onClick={(e) => { e.stopPropagation(); setShowEditor(true); }}>
-          {user?.avatar ? (
-            <img src={resolveFileUrl(user.avatar)} alt="avatar" className={styles.imgAvatar} />
-          ) : (
-            <SharedAvatar name={displayName} size={64} />
-          )}
+          <SharedAvatar name={displayName} src={user?.avatar} size={64} />
           <div className={styles.avatarEditHint}>{t('profile.changeAvatar')}</div>
         </div>
         <div className={styles.userInfo}>

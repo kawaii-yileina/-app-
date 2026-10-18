@@ -6,8 +6,9 @@ import { File, Video, Phone, Play, Pause, X, Maximize2 } from 'lucide-react';
 import { Toast, SpinLoading } from 'antd-mobile';
 import { resolveFileUrl, isInlineMediaSrc } from '../../utils/fileUrl';
 import { useMediaUrl } from '../../hooks/useMediaUrl';
+import { useCachedMediaUrl } from '../../hooks/useCachedMediaUrl';
 import { useBackGuard } from '../../hooks/useBackGuard';
-import { getCachedObjectUrl } from '../../services/mediaCache';
+import { getCachedObjectUrl, peekCachedObjectUrl } from '../../services/mediaCache';
 import { downloadFile } from '../../utils/download';
 import { avatarTint } from '../../utils/avatarColor';
 import { messageApi } from '../../api';
@@ -105,7 +106,7 @@ const VideoMessage = ({ rawSrc, size }: { rawSrc: string; size?: string }) => {
   const loadingRef = useRef(false);
   const srcRef = useRef(rawSrc);
 
-  const coverSrc = `${resolveFileUrl(rawSrc)}#t=0.1`;
+  const [coverSrc, setCoverSrc] = useState(`${resolveFileUrl(rawSrc)}#t=0.1`);
   const sizeText = formatSize(size);
 
   // 上传成功后 rawSrc 由本地 blob 切换为服务端地址：清空旧状态，避免继续使用已失效的 blob URL
@@ -121,6 +122,21 @@ const VideoMessage = ({ rawSrc, size }: { rawSrc: string; size?: string }) => {
     setPaused(true);
     resumeAt.current = 0;
     loadingRef.current = false;
+    setCoverSrc(`${resolveFileUrl(rawSrc)}#t=0.1`);
+  }, [rawSrc]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!rawSrc) return;
+    void peekCachedObjectUrl(rawSrc).then((cached) => {
+      if (!cancelled && cached) {
+        setCoverSrc(`${cached}#t=0.1`);
+        setCoverFailed(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [rawSrc]);
 
   useEffect(() => {
@@ -598,13 +614,14 @@ const VoiceBubble = ({ src, duration, seed, msgId }: { src: string; duration: nu
 const Avatar = ({ name, src, onClick, onLongPress }: {
   name?: string; src?: string; onClick?: () => void; onLongPress?: () => void;
 }) => {
-  const resolvedSrc = src ? resolveFileUrl(src) : undefined;
+  const { url, failed, onError } = useCachedMediaUrl(src, true);
+  const resolvedSrc = failed ? undefined : url;
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 长按已触发：用于吞掉随之而来的 click，避免误触 onClick（如跳转资料页） */
   const longPressFired = useRef(false);
 
   const content = resolvedSrc ? (
-    <img src={resolvedSrc} alt={name || 'avatar'} className={styles.imgAvatar} />
+    <img src={resolvedSrc} alt={name || 'avatar'} className={styles.imgAvatar} onError={onError} />
   ) : (
     <div className={styles.avatar} style={{ background: avatarTint(name || '') }}>
       {name?.charAt(0) || '?'}
@@ -655,6 +672,14 @@ const Avatar = ({ name, src, onClick, onLongPress }: {
       {content}
     </div>
   );
+};
+
+const ContactCardAvatar = ({ src, name, className }: { src?: string; name?: string; className: string }) => {
+  const { url, failed, onError } = useCachedMediaUrl(src, true);
+  if (!url || failed) {
+    return <div className={className}>{name?.charAt(0)}</div>;
+  }
+  return <img src={url} alt={name} className={className} onError={onError} />;
 };
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -718,11 +743,7 @@ const MessageBubble = ({ message, isSelf, senderName, senderAvatar, showSenderNa
     return (
       <div className={styles.contactCard} onClick={() => navigate(`/contacts/${card.userId}`)}>
         <div className={styles.cardHeader}>
-          {card.avatar ? (
-            <img src={resolveFileUrl(card.avatar)} alt={card.nickname} className={styles.cardAvatar} />
-          ) : (
-            <div className={styles.cardAvatar}>{card.nickname?.charAt(0)}</div>
-          )}
+          <ContactCardAvatar src={card.avatar} name={card.nickname} className={styles.cardAvatar} />
           <div className={styles.cardInfo}>
             <span className={styles.cardName}>{card.nickname}</span>
             <span className={styles.cardLabel}>{t('chat.contactCard')}</span>
