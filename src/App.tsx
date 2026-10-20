@@ -305,6 +305,15 @@ const WebSocketProvider = () => {
             });
             break;
           }
+          case SystemEventType.ACCOUNT_BANNED: {
+            wsService.disconnect();
+            useAuthStore.getState().forceLocalLogout();
+            void Dialog.alert({
+              content: t('auth.banned'),
+              confirmText: t('common.confirm'),
+            });
+            break;
+          }
           case SystemEventType.RATE_LIMITED: {
             // 发送频率超限：后端已阻断该消息，本地置失败并提示
             const rateLimitedClientMsgId = headers.clientMsgId || '';

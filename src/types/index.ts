@@ -182,6 +182,7 @@ export const SystemEventType = {
   MESSAGE_RECALL: 'message_recall',
   CONVERSATION_CHANGED: 'conversation_changed',
   SESSION_KICKED: 'session_kicked',
+  ACCOUNT_BANNED: 'account_banned',
   RATE_LIMITED: 'rate_limited',
 } as const;
 

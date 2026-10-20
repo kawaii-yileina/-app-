@@ -50,6 +50,7 @@ const en = {
   auth: {
     title: 'Murmur',
     kicked: 'Your account was signed in on another device. If this was not you, change your password and secure your account immediately.',
+    banned: 'Your account has been banned. Contact an administrator if you believe this is a mistake.',
     login: 'Login',
     register: 'Register',
     username: 'Username',

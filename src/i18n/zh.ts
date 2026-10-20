@@ -50,6 +50,7 @@ const zh = {
   auth: {
     title: 'Murmur',
     kicked: '账号已在另一台设备登录。若非本人操作，请立即修改密码并检查账号安全。',
+    banned: '账号已被封禁。如有疑问，请联系管理员。',
     login: '登录',
     register: '注册',
     username: '用户名',
